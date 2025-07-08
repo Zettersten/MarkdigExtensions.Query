@@ -1,11 +1,11 @@
 
-![Markdig.Query Logo](https://raw.githubusercontent.com/Zettersten/Markdig.Query/refs/heads/main/icon.png)
+![MarkdigExtensions.Query Logo](https://raw.githubusercontent.com/Zettersten/Markdig.Query/refs/heads/main/icon.png)
 
-# Markdig.Query 📄🔍
+# MarkdigExtensions.Query 📄🔍
 
 [![NuGet version](https://badge.fury.io/nu/Markdig.Query.svg)](https://badge.fury.io/nu/Markdig.Query)
 
-**Markdig.Query** is a powerful, jQuery-style query engine for traversing, filtering, and manipulating Markdown documents in .NET. Built on top of the [Markdig](https://github.com/xoofx/markdig) Markdown parser, it provides an expressive API for searching and transforming Markdown nodes with CSS-like selectors and familiar LINQ-style chaining.
+**MarkdigExtensions.Query** is a powerful, jQuery-style query engine for traversing, filtering, and manipulating Markdown documents in .NET. Built on top of the [Markdig](https://github.com/xoofx/markdig) Markdown parser, it provides an expressive API for searching and transforming Markdown nodes with CSS-like selectors and familiar LINQ-style chaining.
 
 ---
 
@@ -25,7 +25,7 @@
 Install from NuGet:
 
 ```bash
-dotnet add package Markdig.Query
+dotnet add package MarkdigExtensions.Query
 ```
 
 ---
@@ -34,7 +34,7 @@ dotnet add package Markdig.Query
 
 ```csharp
 using Markdig;
-using Markdig.Query;
+using MarkdigExtensions.Query;
 
 // Parse a Markdown document
 var markdown = """
@@ -148,24 +148,10 @@ var firstOfEach = doc.QueryBlock("*:first-child");
 
 ---
 
-## 📄 Requirements
-
-* **.NET 6.0 or higher**
-* Works with standard `Markdig.MarkdownDocument`
-
----
-
-## 🤝 Contributing
-
-Pull requests and issues are welcome!
-If you’d like to contribute a new selector, operator, or traversal pattern, open a GitHub issue to propose the API shape first.
-
----
-
 ## 🔗 Links
 
-* GitHub: [Zettersten/Markdig.Query](https://github.com/Zettersten/Markdig.Query)
-* NuGet: [Markdig.Query on NuGet](https://www.nuget.org/packages/Markdig.Query)
+* GitHub: [Zettersten/MarkdigExtensions.Query](https://github.com/Zettersten/MarkdigExtensions.Query)
+* NuGet: [MarkdigExtensions.Query on NuGet](https://www.nuget.org/packages/MarkdigExtensions.Query)
 
 ---
 

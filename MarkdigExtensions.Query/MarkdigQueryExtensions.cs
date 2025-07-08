@@ -1,10 +1,10 @@
-﻿using System.Text.RegularExpressions;
+using System.Text.RegularExpressions;
 using Markdig.Extensions.Tables;
 using Markdig.Syntax;
 using Markdig.Syntax.Inlines;
-using static Markdig.Query.SelectorPart;
+using static MarkdigExtensions.Query.SelectorPart;
 
-namespace Markdig.Query;
+namespace MarkdigExtensions.Query;
 
 public static partial class MarkdownQueryExtensions
 {
@@ -95,11 +95,11 @@ public static partial class MarkdownQueryExtensions
 
             return selectorPart.Combinator switch
             {
-                CombinatorType.DirectChild => GetParent(current) is { } parent
-                    && MatchFromLeaf(parent, depth - 1),
+                CombinatorType.DirectChild
+                    => GetParent(current) is { } parent && MatchFromLeaf(parent, depth - 1),
 
-                CombinatorType.Descendant => WalkAncestors(current)
-                    .Any(ancestor => MatchFromLeaf(ancestor, depth - 1)),
+                CombinatorType.Descendant
+                    => WalkAncestors(current).Any(ancestor => MatchFromLeaf(ancestor, depth - 1)),
 
                 _ => false,
             };
@@ -183,11 +183,8 @@ public static partial class MarkdownQueryExtensions
             "last-child" => index == siblings.Count - 1,
             "even" => index % 2 == 0,
             "odd" => index % 2 == 1,
-            var p when p.StartsWith("nth-child(") && p.EndsWith(")") => int.TryParse(
-                p["nth-child(".Length..^1],
-                out var n
-            )
-                && index == (n - 1),
+            var p when p.StartsWith("nth-child(") && p.EndsWith(')')
+                => int.TryParse(p["nth-child(".Length..^1], out var n) && index == (n - 1),
             _ => false,
         };
     }
@@ -242,7 +239,7 @@ public static partial class MarkdownQueryExtensions
         };
     }
 
-    private static readonly Dictionary<MarkdownObject, MarkdownObject?> _parentMap = [];
+    private static readonly Dictionary<MarkdownObject, MarkdownObject?> parentMap = [];
 
     internal static IEnumerable<MarkdownObject> Flatten(MarkdownObject root)
     {
@@ -252,7 +249,7 @@ public static partial class MarkdownQueryExtensions
         while (stack.Count > 0)
         {
             var (node, parent) = stack.Pop();
-            _parentMap[node] = parent;
+            parentMap[node] = parent;
             yield return node;
 
             if (node is ContainerBlock cb)
@@ -276,7 +273,7 @@ public static partial class MarkdownQueryExtensions
     {
         foreach (var child in container)
         {
-            _parentMap[child] = parent;
+            parentMap[child] = parent;
             yield return child;
 
             if (child is ContainerInline ci)
@@ -289,7 +286,7 @@ public static partial class MarkdownQueryExtensions
 
     internal static MarkdownObject? GetParent(MarkdownObject node)
     {
-        return _parentMap.TryGetValue(node, out var parent) ? parent : null;
+        return parentMap.TryGetValue(node, out var parent) ? parent : null;
     }
 
     private static IEnumerable<MarkdownObject> FlattenInline(ContainerInline container)
@@ -317,31 +314,35 @@ public static partial class MarkdownQueryExtensions
 
         return tag switch
         {
-            "heading" => obj is HeadingBlock h
-                && (attrKey == null || (attrKey == "level" && attrVal == h.Level.ToString())),
+            "heading"
+                => obj is HeadingBlock h
+                    && (attrKey == null || (attrKey == "level" && attrVal == h.Level.ToString())),
 
             "paragraph" => obj is ParagraphBlock,
 
-            "link" => obj is LinkInline li
-                && !li.IsImage
-                && (attrKey == null || (attrKey == "url" && li.Url == attrVal)),
+            "link"
+                => obj is LinkInline li
+                    && !li.IsImage
+                    && (attrKey == null || (attrKey == "url" && li.Url == attrVal)),
 
-            "image" => obj is LinkInline img
-                && img.IsImage
-                && (attrKey == null || (attrKey == "src" && img.Url == attrVal)),
+            "image"
+                => obj is LinkInline img
+                    && img.IsImage
+                    && (attrKey == null || (attrKey == "src" && img.Url == attrVal)),
 
             "emphasis" => obj is EmphasisInline em && em.DelimiterCount == 1,
 
             "strong" => obj is EmphasisInline st && st.DelimiterCount >= 2,
 
-            "codeblock" => obj is FencedCodeBlock cb
-                && (
-                    attrKey == null
-                    || (
-                        attrKey == "language"
-                        && string.Equals(cb.Info, attrVal, StringComparison.OrdinalIgnoreCase)
-                    )
-                ),
+            "codeblock"
+                => obj is FencedCodeBlock cb
+                    && (
+                        attrKey == null
+                        || (
+                            attrKey == "language"
+                            && string.Equals(cb.Info, attrVal, StringComparison.OrdinalIgnoreCase)
+                        )
+                    ),
 
             "table" => obj is Table,
 

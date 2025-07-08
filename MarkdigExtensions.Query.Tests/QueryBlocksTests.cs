@@ -1,6 +1,7 @@
-﻿using Markdig.Syntax;
+using Markdig;
+using Markdig.Syntax;
 
-namespace Markdig.Query.Tests;
+namespace MarkdigExtensions.Query.Tests;
 
 public class QueryBlocksTests
 {
@@ -194,7 +195,7 @@ public class QueryBlocksTests
         var fileToTest = """
             # Welcome to the Test Suite
 
-            This document is designed to test all the features of your Markdown query engine.  
+            This document is designed to test all the features of your Markdown query engine.
             It includes examples of every supported selector, attribute, and combinator.
 
             ---

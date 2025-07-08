@@ -1,4 +1,4 @@
-﻿namespace Markdig.Query;
+namespace MarkdigExtensions.Query;
 
 /// <summary>
 /// Represents a part of a CSS-like selector used for querying Markdown documents

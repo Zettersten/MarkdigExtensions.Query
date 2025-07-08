@@ -1,10 +1,11 @@
-﻿using System.Text;
+using System.Text;
+using Markdig;
 using Markdig.Extensions.Tables;
 using Markdig.Renderers;
 using Markdig.Syntax;
 using Markdig.Syntax.Inlines;
 
-namespace Markdig.Query;
+namespace MarkdigExtensions.Query;
 
 public sealed class MarkdownNode(MarkdownObject node)
 {
@@ -26,6 +27,7 @@ public sealed class MarkdownNode(MarkdownObject node)
             return _cachedText;
         }
     }
+
     public string InnerHtml => _cachedHtml ??= ComputeHtml(node);
 
     public Dictionary<string, object?> Attr()
@@ -230,9 +232,10 @@ public sealed class MarkdownNode(MarkdownObject node)
         return node switch
         {
             LinkInline li => $"[{li.FirstOrDefault()}]({li.Url})",
-            EmphasisInline em => em.DelimiterCount == 1
-                ? $"*{SerializeInline(em)}*"
-                : $"**{SerializeInline(em)}**",
+            EmphasisInline em
+                => em.DelimiterCount == 1
+                    ? $"*{SerializeInline(em)}*"
+                    : $"**{SerializeInline(em)}**",
             FencedCodeBlock fcb => $"```{fcb.Info}\n{fcb.Lines}\n```",
             HeadingBlock h => new string('#', h.Level) + " " + ComputeText(h),
             ParagraphBlock p => ComputeText(p),

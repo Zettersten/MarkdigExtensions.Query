@@ -1,4 +1,4 @@
-﻿namespace Markdig.Query.Tests;
+namespace MarkdigExtensions.Query.Tests;
 
 public static class TestSetup
 {
@@ -14,7 +14,7 @@ public static class TestSetup
         var assembly = typeof(TestSetup).Assembly;
 
         using var stream =
-            assembly.GetManifestResourceStream($"Markdig.Query.Tests.Samples.{fileName}")
+            assembly.GetManifestResourceStream($"MarkdigExtensions.Query.Tests.Samples.{fileName}")
             ?? throw new InvalidOperationException($"Resource '{fileName}' not found.");
 
         using var reader = new StreamReader(stream);

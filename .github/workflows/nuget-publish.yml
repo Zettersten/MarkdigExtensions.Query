@@ -23,7 +23,7 @@ jobs:
       run: dotnet build --configuration Release
 
     - name: Pack
-      run: dotnet pack ./Markdig.Query/Markdig.Query.csproj --configuration Release --no-build -o ./nupkg
+      run: dotnet pack ./MarkdigExtensions.Query/MarkdigExtensions.Query.csproj --configuration Release --no-build -o ./nupkg
 
     - name: Push to NuGet
       run: dotnet nuget push ./nupkg/*.nupkg --source https://api.nuget.org/v3/index.json --api-key ${{secrets.NUGET_API_KEY}} --skip-duplicate
