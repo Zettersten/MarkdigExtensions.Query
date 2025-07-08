@@ -1,5 +1,5 @@
 
-![Markdig.Query Logo](https://raw.githubusercontent.com/Zettersten/Markdig.Query/main/icon.png)
+![Markdig.Query Logo](https://raw.githubusercontent.com/Zettersten/Markdig.Query/refs/heads/main/icon.png)
 
 # Markdig.Query 📄🔍
 
