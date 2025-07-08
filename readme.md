@@ -3,7 +3,7 @@
 
 # MarkdigExtensions.Query 📄🔍
 
-[![NuGet version](https://badge.fury.io/nu/MarkdigExtensions.Query.Query.svg)](https://badge.fury.io/nu/MarkdigExtensions.Query.Query)
+[![NuGet version](https://badge.fury.io/nu/MarkdigExtensions.Query.svg)](https://badge.fury.io/nu/MarkdigExtensions.Query)
 
 **MarkdigExtensions.Query** is a powerful, jQuery-style query engine for traversing, filtering, and manipulating Markdown documents in .NET. Built on top of the [Markdig](https://github.com/xoofx/markdig) Markdown parser, it provides an expressive API for searching and transforming Markdown nodes with CSS-like selectors and familiar LINQ-style chaining.
 
