@@ -1,0 +1,46 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.14.36221.1
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Markdig.Query", "Markdig.Query\Markdig.Query.csproj", "{0A4CA288-B7C6-471B-ABF3-5C183219CFFF}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Markdig.Query.Tests", "Markdig.Query.Tests\Markdig.Query.Tests.csproj", "{5724B3E4-1C89-40E0-8415-5E359973E08B}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "misc", "misc", "{C841F5C2-8F30-5BE9-ECA6-260644CF6F9F}"
+	ProjectSection(SolutionItems) = preProject
+		.editorconfig = .editorconfig
+		.gitattributes = .gitattributes
+		.gitignore = .gitignore
+		.config\dotnet-tools.json = .config\dotnet-tools.json
+		icon.png = icon.png
+		LICENSE = LICENSE
+		.github\workflows\nuget-publish.yml = .github\workflows\nuget-publish.yml
+		.husky\pre-commit = .husky\pre-commit
+		readme.md = readme.md
+		.husky\task-runner.json = .husky\task-runner.json
+		version.json = version.json
+	EndProjectSection
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{0A4CA288-B7C6-471B-ABF3-5C183219CFFF}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{0A4CA288-B7C6-471B-ABF3-5C183219CFFF}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{0A4CA288-B7C6-471B-ABF3-5C183219CFFF}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{0A4CA288-B7C6-471B-ABF3-5C183219CFFF}.Release|Any CPU.Build.0 = Release|Any CPU
+		{5724B3E4-1C89-40E0-8415-5E359973E08B}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{5724B3E4-1C89-40E0-8415-5E359973E08B}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{5724B3E4-1C89-40E0-8415-5E359973E08B}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{5724B3E4-1C89-40E0-8415-5E359973E08B}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {510EF9C5-1988-4CCA-B025-E9C76A992B6B}
+	EndGlobalSection
+EndGlobal
