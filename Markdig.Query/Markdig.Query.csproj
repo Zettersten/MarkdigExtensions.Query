@@ -8,9 +8,11 @@
     <Copyright>Copyright © 2024 Erik Zettersten</Copyright>
     <Company>Markdig.Query</Company>
     <Product>Markdig.Query SDK</Product>
-    <PackageId>Markdig.Query</PackageId>
+    <PackageId>Markdig.Extensions.Query</PackageId>
     <Version>$(GITHUB_REF_NAME.TrimStart('v'))</Version>
-    <Description></Description>
+    <Description>
+      **Markdig.Query** is a powerful, jQuery-style query engine for traversing, filtering, and manipulating Markdown documents in .NET. Built on top of the [Markdig](https://github.com/xoofx/markdig) Markdown parser, it provides an expressive API for searching and transforming Markdown nodes with CSS-like selectors and familiar LINQ-style chaining.
+    </Description>
     <PackageProjectUrl>https://github.com/Zettersten/Markdig.Query</PackageProjectUrl>
     <RepositoryUrl>https://github.com/Zettersten/Markdig.Query</RepositoryUrl>
     <RepositoryType>git</RepositoryType>
