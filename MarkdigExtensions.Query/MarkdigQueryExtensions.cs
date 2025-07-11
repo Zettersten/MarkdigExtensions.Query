@@ -32,6 +32,54 @@ public static partial class MarkdownQueryExtensions
         }
     }
 
+    public static IEnumerable<MarkdownNode> QueryBlocks(this MarkdownNode node, string selector)
+    {
+        var selectorGroups = selector
+            .Split(',')
+            .Select(s => s.Trim())
+            .Where(s => !string.IsNullOrWhiteSpace(s))
+            .Select(ParseSelectorChain)
+            .ToList();
+
+        var decedents = node.Node.Descendants().OfType<MarkdownObject>().ToList();
+
+        foreach (var descendant in decedents)
+        {
+            foreach (var group in selectorGroups)
+            {
+                if (MatchesSelectorChain(descendant, group))
+                {
+                    yield return new MarkdownNode(descendant);
+                }
+            }
+        }
+    }
+
+    public static MarkdownNode? QueryBlock(this MarkdownNode node, string selector)
+    {
+        var selectorGroups = selector
+            .Split(',')
+            .Select(s => s.Trim())
+            .Where(s => !string.IsNullOrWhiteSpace(s))
+            .Select(ParseSelectorChain)
+            .ToList();
+
+        var decedents = node.Node.Descendants().OfType<MarkdownObject>().ToList();
+
+        foreach (var descendant in decedents)
+        {
+            foreach (var group in selectorGroups)
+            {
+                if (MatchesSelectorChain(descendant, group))
+                {
+                    return new MarkdownNode(descendant);
+                }
+            }
+        }
+
+        return null;
+    }
+
     public static MarkdownNode? QueryBlock(this MarkdownDocument document, string selector)
     {
         var selectorGroups = selector
@@ -95,11 +143,11 @@ public static partial class MarkdownQueryExtensions
 
             return selectorPart.Combinator switch
             {
-                CombinatorType.DirectChild
-                    => GetParent(current) is { } parent && MatchFromLeaf(parent, depth - 1),
+                CombinatorType.DirectChild => GetParent(current) is { } parent
+                    && MatchFromLeaf(parent, depth - 1),
 
-                CombinatorType.Descendant
-                    => WalkAncestors(current).Any(ancestor => MatchFromLeaf(ancestor, depth - 1)),
+                CombinatorType.Descendant => WalkAncestors(current)
+                    .Any(ancestor => MatchFromLeaf(ancestor, depth - 1)),
 
                 _ => false,
             };
@@ -183,47 +231,23 @@ public static partial class MarkdownQueryExtensions
             "last-child" => index == siblings.Count - 1,
             "even" => index % 2 == 0,
             "odd" => index % 2 == 1,
-            var p when p.StartsWith("nth-child(") && p.EndsWith(')')
-                => int.TryParse(p["nth-child(".Length..^1], out var n) && index == (n - 1),
+            var p when p.StartsWith("nth-child(") && p.EndsWith(')') => int.TryParse(
+                p["nth-child(".Length..^1],
+                out var n
+            )
+                && index == (n - 1),
             _ => false,
         };
-    }
-
-    private static (string tag, string? attrKey, string? attrVal) ParseSelector(string selector)
-    {
-        selector = NormalizeSelector(selector.Trim().ToLowerInvariant());
-
-        var tag = selector;
-        string? key = null,
-            value = null;
-
-        var bracketStart = selector.IndexOf('[');
-        var bracketEnd = selector.IndexOf(']');
-
-        if (bracketStart > 0 && bracketEnd > bracketStart)
-        {
-            tag = selector[..bracketStart];
-
-            var inner = selector.Substring(bracketStart + 1, bracketEnd - bracketStart - 1);
-
-            var parts = inner.Split('=');
-            key = parts[0].Trim().ToLower();
-
-            if (parts.Length == 2)
-            {
-                value = parts[1].Trim().Trim('"');
-            }
-        }
-
-        return (tag, key, value);
     }
 
     private static string NormalizeSelector(string selector)
     {
         return selector switch
         {
+            "html" => "html",
+            "a" => "link",
+            "link" => "link",
             "b" => "strong",
-            "strong" => "strong",
             "i" => "emphasis",
             "em" => "emphasis",
             "img" => "image",
@@ -314,41 +338,52 @@ public static partial class MarkdownQueryExtensions
 
         return tag switch
         {
-            "heading"
-                => obj is HeadingBlock h
-                    && (attrKey == null || (attrKey == "level" && attrVal == h.Level.ToString())),
+            "heading" => obj is HeadingBlock h
+                && (attrKey == null || (attrKey == "level" && attrVal == h.Level.ToString())),
 
             "paragraph" => obj is ParagraphBlock,
 
-            "link"
-                => obj is LinkInline li
-                    && !li.IsImage
-                    && (attrKey == null || (attrKey == "url" && li.Url == attrVal)),
+            "link" => obj is LinkInline li
+                && !li.IsImage
+                && (
+                    attrKey == null
+                    || (
+                        (attrKey == "url" && li.Url == attrVal)
+                        || (attrKey == "href" && li.Url == attrVal)
+                    )
+                ),
 
-            "image"
-                => obj is LinkInline img
-                    && img.IsImage
-                    && (attrKey == null || (attrKey == "src" && img.Url == attrVal)),
+            "image" => obj is LinkInline img
+                && img.IsImage
+                && (attrKey == null || (attrKey == "src" && img.Url == attrVal)),
 
             "emphasis" => obj is EmphasisInline em && em.DelimiterCount == 1,
 
             "strong" => obj is EmphasisInline st && st.DelimiterCount >= 2,
 
-            "codeblock"
-                => obj is FencedCodeBlock cb
-                    && (
-                        attrKey == null
-                        || (
-                            attrKey == "language"
-                            && string.Equals(cb.Info, attrVal, StringComparison.OrdinalIgnoreCase)
-                        )
-                    ),
+            "codeblock" => obj is FencedCodeBlock cb
+                && (
+                    attrKey == null
+                    || (
+                        attrKey == "language"
+                        && string.Equals(cb.Info, attrVal, StringComparison.OrdinalIgnoreCase)
+                    )
+                ),
 
             "table" => obj is Table,
 
             "ol" => obj is ListBlock list && list.IsOrdered,
 
             "ul" => obj is ListBlock list && !list.IsOrdered,
+
+            "li" => obj is ListItemBlock li
+                && (
+                    attrKey == null
+                    || (
+                        (attrKey == "index" && li.Order.ToString() == attrVal)
+                        || attrKey == "order" && li.Order.ToString() == attrVal
+                    )
+                ),
 
             "blockquote" => obj is QuoteBlock,
 

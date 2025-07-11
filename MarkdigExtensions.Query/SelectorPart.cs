@@ -23,11 +23,11 @@ public readonly record struct SelectorPart
         string? pseudoSelector = null
     )
     {
-        Tag = tag;
-        AttributeKey = attributeKey;
-        AttributeValue = attributeValue;
-        Combinator = combinator;
-        PseudoSelector = pseudoSelector;
+        this.Tag = tag;
+        this.AttributeKey = attributeKey;
+        this.AttributeValue = attributeValue;
+        this.Combinator = combinator;
+        this.PseudoSelector = pseudoSelector;
     }
 
     public enum CombinatorType

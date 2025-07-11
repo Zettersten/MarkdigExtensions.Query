@@ -9,9 +9,9 @@ namespace MarkdigExtensions.Query;
 
 public sealed class MarkdownNode(MarkdownObject node)
 {
-    private string? _cachedText;
-    private string? _cachedHtml;
-    private Dictionary<string, object?>? _cachedAttr;
+    private string? cachedText;
+    private string? cachedHtml;
+    private Dictionary<string, object?>? cachedAttr;
 
     public MarkdownObject Node => node;
 
@@ -19,25 +19,25 @@ public sealed class MarkdownNode(MarkdownObject node)
     {
         get
         {
-            if (_cachedText is null)
+            if (this.cachedText is null)
             {
-                _cachedText = ComputeText(node);
+                this.cachedText = ComputeText(node);
             }
 
-            return _cachedText;
+            return this.cachedText;
         }
     }
 
-    public string InnerHtml => _cachedHtml ??= ComputeHtml(node);
+    public string InnerHtml => this.cachedHtml ??= ComputeHtml(node);
 
     public Dictionary<string, object?> Attr()
     {
-        return _cachedAttr ??= ComputeAttrs(node);
+        return this.cachedAttr ??= ComputeAttrs(node);
     }
 
     public object? Attr(string key)
     {
-        var attrs = _cachedAttr ??= ComputeAttrs(node);
+        var attrs = this.cachedAttr ??= ComputeAttrs(node);
 
         return attrs.TryGetValue(key, out var value) ? value : null;
     }
@@ -46,7 +46,7 @@ public sealed class MarkdownNode(MarkdownObject node)
 
     public string ToMarkdown() => ComputeMarkdown(node);
 
-    public override string ToString() => InnerText;
+    public override string ToString() => this.InnerText;
 
     public IEnumerable<MarkdownNode> NextUntil(
         string selector,
@@ -56,7 +56,7 @@ public sealed class MarkdownNode(MarkdownObject node)
         bool blockOnly = true
     )
     {
-        var doc = GetDocumentRoot();
+        var doc = this.GetDocumentRoot();
         if (doc == null)
             yield break;
 
@@ -99,7 +99,7 @@ public sealed class MarkdownNode(MarkdownObject node)
         bool blockOnly = true
     )
     {
-        var doc = GetDocumentRoot();
+        var doc = this.GetDocumentRoot();
         if (doc == null)
             yield break;
 
@@ -232,10 +232,9 @@ public sealed class MarkdownNode(MarkdownObject node)
         return node switch
         {
             LinkInline li => $"[{li.FirstOrDefault()}]({li.Url})",
-            EmphasisInline em
-                => em.DelimiterCount == 1
-                    ? $"*{SerializeInline(em)}*"
-                    : $"**{SerializeInline(em)}**",
+            EmphasisInline em => em.DelimiterCount == 1
+                ? $"*{SerializeInline(em)}*"
+                : $"**{SerializeInline(em)}**",
             FencedCodeBlock fcb => $"```{fcb.Info}\n{fcb.Lines}\n```",
             HeadingBlock h => new string('#', h.Level) + " " + ComputeText(h),
             ParagraphBlock p => ComputeText(p),
