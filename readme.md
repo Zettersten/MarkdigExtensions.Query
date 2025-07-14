@@ -1,5 +1,5 @@
 
-![MarkdigExtensions.Query Logo](https://raw.githubusercontent.com/Zettersten/Markdig.Query/refs/heads/main/icon.png)
+![MarkdigExtensions.Query Logo](https://raw.githubusercontent.com/Zettersten/MarkdigExtensions.Query/refs/heads/main/icon.png)
 
 # MarkdigExtensions.Query 📄🔍
 
@@ -155,5 +155,5 @@ var firstOfEach = doc.QueryBlock("*:first-child");
 
 ---
 
-Thanks for using **Markdig.Query**!
+Thanks for using **MarkdigExtensions.Query**!
 Enjoy writing powerful, expressive markdown transformations — just like jQuery for documents.

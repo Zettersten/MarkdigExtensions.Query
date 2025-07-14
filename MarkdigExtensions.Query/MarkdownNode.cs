@@ -1,17 +1,15 @@
-using System.Text;
-using Markdig;
-using Markdig.Extensions.Tables;
-using Markdig.Renderers;
 using Markdig.Syntax;
-using Markdig.Syntax.Inlines;
 
 namespace MarkdigExtensions.Query;
 
 public sealed class MarkdownNode(MarkdownObject node)
 {
-    private string? cachedText;
-    private string? cachedHtml;
-    private Dictionary<string, object?>? cachedAttr;
+    private string? _cachedText;
+    private string? _cachedHtml;
+    private Dictionary<string, object?>? _cachedAttr;
+
+    // For thread-safe lazy initialization
+    private readonly object _initLock = new object();
 
     public MarkdownObject Node => node;
 
@@ -19,56 +17,115 @@ public sealed class MarkdownNode(MarkdownObject node)
     {
         get
         {
-            if (this.cachedText is null)
+            if (_cachedText == null)
             {
-                this.cachedText = ComputeText(node);
+                lock (_initLock)
+                {
+                    if (_cachedText == null)
+                    {
+                        _cachedText = MarkdownRenderer.GetText(node);
+                    }
+                }
             }
-
-            return this.cachedText;
+            return _cachedText;
         }
     }
 
-    public string InnerHtml => this.cachedHtml ??= ComputeHtml(node);
+    public string InnerHtml
+    {
+        get
+        {
+            if (_cachedHtml == null)
+            {
+                lock (_initLock)
+                {
+                    if (_cachedHtml == null)
+                    {
+                        _cachedHtml = MarkdownRenderer.ToHtml(node);
+                    }
+                }
+            }
+            return _cachedHtml;
+        }
+    }
 
     public Dictionary<string, object?> Attr()
     {
-        return this.cachedAttr ??= ComputeAttrs(node);
+        if (_cachedAttr == null)
+        {
+            lock (_initLock)
+            {
+                if (_cachedAttr == null)
+                {
+                    _cachedAttr = MarkdownRenderer.GetAttributes(node);
+                }
+            }
+        }
+        return _cachedAttr;
     }
 
     public object? Attr(string key)
     {
-        var attrs = this.cachedAttr ??= ComputeAttrs(node);
+        var attrs = this.Attr();
 
         return attrs.TryGetValue(key, out var value) ? value : null;
     }
 
-    public string ToHtml() => ComputeHtml(node);
+    public string ToHtml() => MarkdownRenderer.ToHtml(node);
 
-    public string ToMarkdown() => ComputeMarkdown(node);
+    public string ToMarkdown() => MarkdownRenderer.ToMarkdown(node);
 
     public override string ToString() => this.InnerText;
 
-    public IEnumerable<MarkdownNode> NextUntil(
+    /// <summary>
+    /// Traversal direction for node iteration
+    /// </summary>
+    private enum TraversalDirection
+    {
+        Forward,
+        Backward,
+    }
+
+    /// <summary>
+    /// Common implementation for NextUntil and PrevUntil to avoid code duplication
+    /// </summary>
+    private IEnumerable<MarkdownNode> TraverseUntil(
         string selector,
+        TraversalDirection direction,
         bool includeStart = false,
         bool includeEnd = false,
         bool siblingsOnly = false,
         bool blockOnly = true
     )
     {
-        var doc = this.GetDocumentRoot();
+        var doc = MarkdownQueryExtensions.GetDocumentRoot(this.Node);
         if (doc == null)
             yield break;
 
-        var flat = MarkdownQueryExtensions.Flatten(doc).ToList();
+        // Create a thread-local copy of the flattened document
+        List<MarkdownObject> flat;
+        lock (doc) // Use document as sync object
+        {
+            flat = MarkdownQueryExtensions.Flatten(doc).ToList();
+        }
+
         var startIndex = flat.IndexOf(this.Node);
         if (startIndex == -1)
             yield break;
 
+        // Cache the query results to avoid repeated evaluation
+        var matchingNodes = MarkdownQueryExtensions
+            .QueryBlocks(doc, selector)
+            .Select(n => n.Node)
+            .ToHashSet();
+
         if (includeStart && (!blockOnly || this.Node is Block))
             yield return new MarkdownNode(this.Node);
 
-        for (int i = startIndex + 1; i < flat.Count; i++)
+        int step = direction == TraversalDirection.Forward ? 1 : -1;
+        int endBound = direction == TraversalDirection.Forward ? flat.Count : -1;
+
+        for (int i = startIndex + step; i != endBound; i += step)
         {
             var current = flat[i];
 
@@ -79,7 +136,7 @@ public sealed class MarkdownNode(MarkdownObject node)
             )
                 continue;
 
-            if (MarkdownQueryExtensions.QueryBlocks(doc, selector).Any(n => n.Node == current))
+            if (matchingNodes.Contains(current))
             {
                 if (includeEnd && (!blockOnly || current is Block))
                     yield return new MarkdownNode(current);
@@ -89,6 +146,24 @@ public sealed class MarkdownNode(MarkdownObject node)
             if (!blockOnly || current is Block)
                 yield return new MarkdownNode(current);
         }
+    }
+
+    public IEnumerable<MarkdownNode> NextUntil(
+        string selector,
+        bool includeStart = false,
+        bool includeEnd = false,
+        bool siblingsOnly = false,
+        bool blockOnly = true
+    )
+    {
+        return this.TraverseUntil(
+            selector,
+            TraversalDirection.Forward,
+            includeStart,
+            includeEnd,
+            siblingsOnly,
+            blockOnly
+        );
     }
 
     public IEnumerable<MarkdownNode> PrevUntil(
@@ -99,39 +174,14 @@ public sealed class MarkdownNode(MarkdownObject node)
         bool blockOnly = true
     )
     {
-        var doc = this.GetDocumentRoot();
-        if (doc == null)
-            yield break;
-
-        var flat = MarkdownQueryExtensions.Flatten(doc).ToList();
-        var startIndex = flat.IndexOf(this.Node);
-        if (startIndex == -1)
-            yield break;
-
-        if (includeStart && (!blockOnly || this.Node is Block))
-            yield return new MarkdownNode(this.Node);
-
-        for (int i = startIndex - 1; i >= 0; i--)
-        {
-            var current = flat[i];
-
-            if (
-                siblingsOnly
-                && MarkdownQueryExtensions.GetParent(current)
-                    != MarkdownQueryExtensions.GetParent(this.Node)
-            )
-                continue;
-
-            if (MarkdownQueryExtensions.QueryBlocks(doc, selector).Any(n => n.Node == current))
-            {
-                if (includeEnd && (!blockOnly || current is Block))
-                    yield return new MarkdownNode(current);
-                yield break;
-            }
-
-            if (!blockOnly || current is Block)
-                yield return new MarkdownNode(current);
-        }
+        return this.TraverseUntil(
+            selector,
+            TraversalDirection.Backward,
+            includeStart,
+            includeEnd,
+            siblingsOnly,
+            blockOnly
+        );
     }
 
     public static IEnumerable<MarkdownNode> Between(
@@ -140,11 +190,19 @@ public sealed class MarkdownNode(MarkdownObject node)
         bool includeBounds = false
     )
     {
-        var doc = start.GetDocumentRoot();
-        if (doc == null || end.GetDocumentRoot() != doc)
+        var startDoc = MarkdownQueryExtensions.GetDocumentRoot(start.Node);
+        var endDoc = MarkdownQueryExtensions.GetDocumentRoot(end.Node);
+
+        if (startDoc == null || endDoc == null || startDoc != endDoc)
             yield break;
 
-        var flat = MarkdownQueryExtensions.Flatten(doc).ToList();
+        // Add thread safety with lock on document
+        List<MarkdownObject> flat;
+        lock (startDoc) // Use document as sync object
+        {
+            flat = MarkdownQueryExtensions.Flatten(startDoc).ToList();
+        }
+
         var startIndex = flat.IndexOf(start.Node);
         var endIndex = flat.IndexOf(end.Node);
 
@@ -161,207 +219,9 @@ public sealed class MarkdownNode(MarkdownObject node)
         }
     }
 
-    private MarkdownDocument? GetDocumentRoot()
+    public static void ReleaseDocument(MarkdownDocument document)
     {
-        if (this.Node is MarkdownDocument doc)
-            return doc;
-
-        var current = this.Node;
-        while (current != null)
-        {
-            if (current is MarkdownDocument d)
-                return d;
-            current = MarkdownQueryExtensions.GetParent(current);
-        }
-        return null;
+        // Use the methods from MarkdigQueryExtensions
+        MarkdownQueryExtensions.ReleaseDocument(document);
     }
-
-    #region -- Rendering Helpers --
-
-    private static string ComputeText(MarkdownObject node)
-    {
-        if (node is LeafBlock lb && lb.Inline != null)
-        {
-            return SerializeInline(lb.Inline);
-        }
-
-        if (node is ContainerInline ci)
-        {
-            return SerializeInline(ci);
-        }
-
-        if (node is ThematicBreakBlock)
-        {
-            return string.Empty;
-        }
-
-        if (node is ContainerBlock cb)
-        {
-            // Concatenate the inner text of child LeafBlocks
-            var sb = new StringBuilder();
-            foreach (var child in cb)
-            {
-                var text = ComputeText(child);
-                if (!string.IsNullOrWhiteSpace(text))
-                    sb.Append(text).Append('\n');
-            }
-            return sb.ToString().TrimEnd();
-        }
-
-        return node.ToString() ?? string.Empty;
-    }
-
-    private static string ComputeHtml(MarkdownObject node)
-    {
-        var sb = new StringBuilder();
-        using var writer = new StringWriter(sb);
-
-        var renderer = new HtmlRenderer(writer);
-        var pipeline = new MarkdownPipelineBuilder().UseAdvancedExtensions().Build();
-
-        pipeline.Setup(renderer);
-        renderer.Render(node);
-        writer.Flush();
-
-        return sb.ToString();
-    }
-
-    private static string ComputeMarkdown(MarkdownObject node)
-    {
-        // Best-effort text-only markdown fallback
-        return node switch
-        {
-            LinkInline li => $"[{li.FirstOrDefault()}]({li.Url})",
-            EmphasisInline em => em.DelimiterCount == 1
-                ? $"*{SerializeInline(em)}*"
-                : $"**{SerializeInline(em)}**",
-            FencedCodeBlock fcb => $"```{fcb.Info}\n{fcb.Lines}\n```",
-            HeadingBlock h => new string('#', h.Level) + " " + ComputeText(h),
-            ParagraphBlock p => ComputeText(p),
-            _ => ComputeText(node),
-        };
-    }
-
-    private static Dictionary<string, object?> ComputeAttrs(MarkdownObject node)
-    {
-        var dict = new Dictionary<string, object?>();
-
-        switch (node)
-        {
-            case LinkInline li:
-                dict["isImage"] = li.IsImage;
-
-                if (li.IsImage)
-                {
-                    dict["src"] = li.Url;
-                    dict["alt"] = li.Title;
-                }
-                else
-                {
-                    dict["href"] = li.Url;
-                    dict["title"] = li.Title;
-                }
-
-                dict["text"] = SerializeInline(li);
-                break;
-
-            case HeadingBlock h:
-                dict["level"] = h.Level;
-                dict["text"] = SerializeInline(h.Inline);
-                break;
-
-            case EmphasisInline em:
-                dict["type"] = em.DelimiterCount == 1 ? "italic" : "bold";
-                dict["text"] = SerializeInline(em);
-                break;
-
-            case FencedCodeBlock cb:
-                dict["language"] = cb.Info;
-                dict["text"] = cb.Lines.ToString();
-                break;
-
-            case Table t:
-                dict["type"] = "table";
-                break;
-
-            case ListBlock l:
-                dict["ordered"] = l.IsOrdered;
-                dict["count"] = l.Count;
-                break;
-
-            case ParagraphBlock p:
-                dict["text"] = SerializeInline(p.Inline);
-                break;
-        }
-
-        return dict;
-    }
-
-    private static string SerializeInline(ContainerInline? inline)
-    {
-        var sb = new StringBuilder();
-
-        if (inline is null)
-        {
-            return string.Empty;
-        }
-
-        foreach (var child in inline)
-        {
-            switch (child)
-            {
-                case LiteralInline lit:
-                    sb.Append(lit.Content.ToString());
-                    break;
-
-                case LineBreakInline:
-                    sb.Append('\n');
-                    break;
-
-                case CodeInline ci:
-                    sb.Append('`').Append(ci.Content).Append('`');
-                    break;
-
-                case EmphasisInline em:
-                    var delim = em.DelimiterCount == 2 ? "**" : "*";
-                    sb.Append(delim).Append(SerializeInline(em)).Append(delim);
-                    break;
-
-                case LinkInline li:
-                    if (li.IsImage)
-                    {
-                        sb.Append("![")
-                            .Append(SerializeInline(li))
-                            .Append("](")
-                            .Append(li.Url)
-                            .Append(')');
-                    }
-                    else
-                    {
-                        sb.Append("[")
-                            .Append(SerializeInline(li))
-                            .Append("](")
-                            .Append(li.Url)
-                            .Append(')');
-                    }
-                    break;
-
-                case HtmlInline html:
-                    sb.Append(html.Tag);
-                    break;
-
-                case ContainerInline ci:
-                    sb.Append(SerializeInline(ci));
-                    break;
-
-                default:
-                    sb.Append(child.ToString());
-                    break;
-            }
-        }
-
-        return sb.ToString();
-    }
-
-    #endregion -- Rendering Helpers --
 }

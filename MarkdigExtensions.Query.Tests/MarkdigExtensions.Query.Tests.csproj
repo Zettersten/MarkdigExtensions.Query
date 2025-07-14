@@ -4,6 +4,7 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <IsPackable>false</IsPackable>
+    <AssemblyName>MarkdigExtensions.Query.Tests</AssemblyName>
   </PropertyGroup>
   <ItemGroup>
     <None Remove="Samples\test-suite-01.md" />
