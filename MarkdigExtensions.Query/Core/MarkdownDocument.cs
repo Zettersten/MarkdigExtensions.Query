@@ -9,7 +9,7 @@ namespace MarkdigExtensions.Query.Core;
 /// Represents a markdown document with DOM-like structure and jQuery-style querying capabilities.
 /// Provides a unified interface for traversing, filtering, and manipulating markdown nodes.
 /// </summary>
-public partial class MarkdownDocument : IEnumerable<INode>
+public partial class MarkdownDocument : IEnumerable<INode>, IDisposable
 {
     private readonly DocumentNode root;
     private readonly Dictionary<string, List<INode>> selectorIndex;
@@ -17,6 +17,10 @@ public partial class MarkdownDocument : IEnumerable<INode>
     private readonly List<INode> allNodes;
     private readonly Stack<MarkdownDocument> previousSelections;
     private readonly ReadOnlyCollection<INode> currentNodes;
+    private readonly bool isOwner; // Tracks if this instance owns the resources
+
+    // Disposed state tracking
+    private bool disposed = false;
 
     // CSS selector parsing regex patterns
     private static readonly Regex attributeSelectorRegex = AttributeSelectorRegexPattern();
@@ -36,6 +40,7 @@ public partial class MarkdownDocument : IEnumerable<INode>
         this.attributeIndex = sourceDocument.attributeIndex;
         this.allNodes = sourceDocument.allNodes;
         this.previousSelections = previousSelections ?? new Stack<MarkdownDocument>();
+        this.isOwner = false; // Child instances don't own the shared resources
     }
 
     // Primary constructor for creating document from root
@@ -46,6 +51,7 @@ public partial class MarkdownDocument : IEnumerable<INode>
         this.attributeIndex = new Dictionary<string, List<INode>>(StringComparer.OrdinalIgnoreCase);
         this.allNodes = [];
         this.previousSelections = new Stack<MarkdownDocument>();
+        this.isOwner = true; // Primary instance owns the resources
 
         this.BuildIndexes();
         this.currentNodes = this.allNodes.AsReadOnly();
@@ -54,19 +60,54 @@ public partial class MarkdownDocument : IEnumerable<INode>
     #region Properties
 
     /// <summary>Gets the root document node.</summary>
-    public DocumentNode Root => this.root;
+    public DocumentNode Root
+    {
+        get
+        {
+            this.ThrowIfDisposed();
+            return this.root;
+        }
+    }
 
     /// <summary>Gets all nodes in the document.</summary>
-    public IReadOnlyList<INode> AllNodes => this.allNodes.AsReadOnly();
+    public IReadOnlyList<INode> AllNodes
+    {
+        get
+        {
+            this.ThrowIfDisposed();
+            return this.allNodes.AsReadOnly();
+        }
+    }
 
     /// <summary>Gets the currently selected nodes.</summary>
-    public IReadOnlyList<INode> SelectedNodes => this.currentNodes;
+    public IReadOnlyList<INode> SelectedNodes
+    {
+        get
+        {
+            this.ThrowIfDisposed();
+            return this.currentNodes;
+        }
+    }
 
     /// <summary>Gets the total number of nodes in the document.</summary>
-    public int Count => this.allNodes.Count;
+    public int Count
+    {
+        get
+        {
+            this.ThrowIfDisposed();
+            return this.allNodes.Count;
+        }
+    }
 
     /// <summary>Gets the number of currently selected nodes.</summary>
-    public int Length => this.currentNodes.Count;
+    public int Length
+    {
+        get
+        {
+            this.ThrowIfDisposed();
+            return this.currentNodes.Count;
+        }
+    }
 
     #endregion Properties
 
@@ -75,6 +116,7 @@ public partial class MarkdownDocument : IEnumerable<INode>
     /// <summary>Executes a CSS-like selector query against the entire document.</summary>
     public MarkdownDocument Query(string selector)
     {
+        this.ThrowIfDisposed();
         ArgumentException.ThrowIfNullOrWhiteSpace(selector);
         var results = this.ExecuteCssQuery(selector);
         return new MarkdownDocument(results, this, this.PushCurrentSelection());
@@ -83,19 +125,29 @@ public partial class MarkdownDocument : IEnumerable<INode>
     /// <summary>Creates a new document view with specific nodes selected.</summary>
     public MarkdownDocument Query(IEnumerable<INode> nodes)
     {
+        this.ThrowIfDisposed();
         ArgumentNullException.ThrowIfNull(nodes);
         return new MarkdownDocument(nodes, this, this.PushCurrentSelection());
     }
 
     /// <summary>Finds the first node matching the CSS selector.</summary>
-    public INode? QueryFirst(string selector) => this.ExecuteCssQuery(selector).FirstOrDefault();
+    public INode? QueryFirst(string selector)
+    {
+        this.ThrowIfDisposed();
+        return this.ExecuteCssQuery(selector).FirstOrDefault();
+    }
 
     /// <summary>Checks if any nodes in the document match the CSS selector.</summary>
-    public bool HasMatch(string selector) => this.ExecuteCssQuery(selector).Any();
+    public bool HasMatch(string selector)
+    {
+        this.ThrowIfDisposed();
+        return this.ExecuteCssQuery(selector).Any();
+    }
 
     /// <summary>Finds descendants of current selection matching the CSS selector.</summary>
     public MarkdownDocument Find(string selector)
     {
+        this.ThrowIfDisposed();
         ArgumentException.ThrowIfNullOrWhiteSpace(selector);
         var descendants = this.currentNodes.SelectMany(GetDescendants).ToList();
         var tempDoc = new MarkdownDocument(new DocumentNode([0], children: descendants));
@@ -430,6 +482,7 @@ public partial class MarkdownDocument : IEnumerable<INode>
     public MarkdownDocument GetNodes<T>(Func<T, bool>? predicate = null)
         where T : class, INode
     {
+        this.ThrowIfDisposed();
         var nodes = this.allNodes.OfType<T>();
         if (predicate != null)
             nodes = nodes.Where(predicate);
@@ -440,36 +493,68 @@ public partial class MarkdownDocument : IEnumerable<INode>
     public IEnumerable<T> GetNodesByType<T>(Func<T, bool>? predicate = null)
         where T : class, INode
     {
+        this.ThrowIfDisposed();
         var nodes = this.allNodes.OfType<T>();
         return predicate != null ? nodes.Where(predicate) : nodes;
     }
 
     /// <summary>Gets all heading nodes with optional level filtering.</summary>
-    public MarkdownDocument GetHeadings(int? headingLevel = null) =>
-        headingLevel.HasValue
+    public MarkdownDocument GetHeadings(int? headingLevel = null)
+    {
+        this.ThrowIfDisposed();
+        return headingLevel.HasValue
             ? this.GetNodes<HeadingNode>(h => h.HeadingLevel == headingLevel.Value)
             : this.GetNodes<HeadingNode>();
+    }
 
     /// <summary>Gets all link nodes.</summary>
-    public MarkdownDocument GetLinks() => this.GetNodes<LinkNode>();
+    public MarkdownDocument GetLinks()
+    {
+        this.ThrowIfDisposed();
+        return this.GetNodes<LinkNode>();
+    }
 
     /// <summary>Gets all image nodes.</summary>
-    public MarkdownDocument GetImages() => this.GetNodes<ImageNode>();
+    public MarkdownDocument GetImages()
+    {
+        this.ThrowIfDisposed();
+        return this.GetNodes<ImageNode>();
+    }
 
     /// <summary>Gets all text nodes.</summary>
-    public MarkdownDocument GetTextNodes() => this.GetNodes<TextNode>();
+    public MarkdownDocument GetTextNodes()
+    {
+        this.ThrowIfDisposed();
+        return this.GetNodes<TextNode>();
+    }
 
     /// <summary>Gets all paragraph nodes.</summary>
-    public MarkdownDocument GetParagraphs() => this.GetNodes<ParagraphNode>();
+    public MarkdownDocument GetParagraphs()
+    {
+        this.ThrowIfDisposed();
+        return this.GetNodes<ParagraphNode>();
+    }
 
     /// <summary>Gets all code block nodes.</summary>
-    public MarkdownDocument GetCodeBlocks() => this.GetNodes<CodeBlockNode>();
+    public MarkdownDocument GetCodeBlocks()
+    {
+        this.ThrowIfDisposed();
+        return this.GetNodes<CodeBlockNode>();
+    }
 
     /// <summary>Gets all list nodes.</summary>
-    public MarkdownDocument GetLists() => this.GetNodes<ListNode>();
+    public MarkdownDocument GetLists()
+    {
+        this.ThrowIfDisposed();
+        return this.GetNodes<ListNode>();
+    }
 
     /// <summary>Gets all table nodes.</summary>
-    public MarkdownDocument GetTables() => this.GetNodes<TableNode>();
+    public MarkdownDocument GetTables()
+    {
+        this.ThrowIfDisposed();
+        return this.GetNodes<TableNode>();
+    }
 
     #endregion Type-based Querying
 
@@ -478,6 +563,7 @@ public partial class MarkdownDocument : IEnumerable<INode>
     /// <summary>Filters current selection using predicate or selector.</summary>
     public MarkdownDocument Filter(Func<INode, bool> predicate)
     {
+        this.ThrowIfDisposed();
         ArgumentNullException.ThrowIfNull(predicate);
         return new MarkdownDocument(
             this.currentNodes.Where(predicate),
@@ -488,6 +574,7 @@ public partial class MarkdownDocument : IEnumerable<INode>
 
     public MarkdownDocument Filter(string selector)
     {
+        this.ThrowIfDisposed();
         ArgumentException.ThrowIfNullOrWhiteSpace(selector);
         var matchingNodes = this.ExecuteCssQuery(selector).ToHashSet();
         return new MarkdownDocument(
@@ -500,6 +587,7 @@ public partial class MarkdownDocument : IEnumerable<INode>
     /// <summary>Excludes nodes from current selection.</summary>
     public MarkdownDocument Not(Func<INode, bool> predicate)
     {
+        this.ThrowIfDisposed();
         ArgumentNullException.ThrowIfNull(predicate);
         return new MarkdownDocument(
             this.currentNodes.Where(n => !predicate(n)),
@@ -510,6 +598,7 @@ public partial class MarkdownDocument : IEnumerable<INode>
 
     public MarkdownDocument Not(string selector)
     {
+        this.ThrowIfDisposed();
         ArgumentException.ThrowIfNullOrWhiteSpace(selector);
         var excludeNodes = this.ExecuteCssQuery(selector).ToHashSet();
         return new MarkdownDocument(
@@ -521,6 +610,7 @@ public partial class MarkdownDocument : IEnumerable<INode>
 
     public MarkdownDocument Not(IEnumerable<INode> exclusions)
     {
+        this.ThrowIfDisposed();
         ArgumentNullException.ThrowIfNull(exclusions);
         var excludeSet = exclusions.ToHashSet();
         return new MarkdownDocument(
@@ -533,6 +623,7 @@ public partial class MarkdownDocument : IEnumerable<INode>
     /// <summary>Filters nodes that contain matching descendants.</summary>
     public MarkdownDocument Has(Func<INode, bool> predicate)
     {
+        this.ThrowIfDisposed();
         ArgumentNullException.ThrowIfNull(predicate);
         var matching = this.currentNodes.Where(node => GetDescendants(node).Any(predicate));
         return new MarkdownDocument(matching, this, this.PushCurrentSelection());
@@ -540,6 +631,7 @@ public partial class MarkdownDocument : IEnumerable<INode>
 
     public MarkdownDocument Has(string selector)
     {
+        this.ThrowIfDisposed();
         ArgumentException.ThrowIfNullOrWhiteSpace(selector);
 
         var matching = this.currentNodes.Where(node =>
@@ -555,12 +647,14 @@ public partial class MarkdownDocument : IEnumerable<INode>
     /// <summary>Tests if any selected element matches predicate/selector.</summary>
     public bool Is(Func<INode, bool> predicate)
     {
+        this.ThrowIfDisposed();
         ArgumentNullException.ThrowIfNull(predicate);
         return this.currentNodes.Any(predicate);
     }
 
     public bool Is(string selector)
     {
+        this.ThrowIfDisposed();
         ArgumentException.ThrowIfNullOrWhiteSpace(selector);
         var matchingNodes = this.ExecuteCssQuery(selector).ToHashSet();
         return this.currentNodes.Any(matchingNodes.Contains);
@@ -571,28 +665,48 @@ public partial class MarkdownDocument : IEnumerable<INode>
     #region Traversal Methods
 
     /// <summary>Gets parent elements of current selection.</summary>
-    public MarkdownDocument Parent(Func<INode, bool>? filter = null) =>
-        this.TraverseRelated(node => new[] { this.GetParent(node) }.Where(p => p != null)!, filter);
+    public MarkdownDocument Parent(Func<INode, bool>? filter = null)
+    {
+        this.ThrowIfDisposed();
+        return this.TraverseRelated(
+            node => new[] { this.GetParent(node) }.Where(p => p != null)!,
+            filter
+        );
+    }
 
-    public MarkdownDocument Parent(string selector) =>
-        this.Parent(this.ExecuteCssQuery(selector).ToHashSet().Contains);
+    public MarkdownDocument Parent(string selector)
+    {
+        this.ThrowIfDisposed();
+        return this.Parent(this.ExecuteCssQuery(selector).ToHashSet().Contains);
+    }
 
     /// <summary>Gets ancestor elements of current selection.</summary>
-    public MarkdownDocument Parents(Func<INode, bool>? filter = null) =>
-        this.TraverseRelated(this.GetAncestors, filter);
+    public MarkdownDocument Parents(Func<INode, bool>? filter = null)
+    {
+        this.ThrowIfDisposed();
+        return this.TraverseRelated(this.GetAncestors, filter);
+    }
 
-    public MarkdownDocument Parents(string selector) =>
-        this.Parents(this.ExecuteCssQuery(selector).ToHashSet().Contains);
+    public MarkdownDocument Parents(string selector)
+    {
+        this.ThrowIfDisposed();
+        return this.Parents(this.ExecuteCssQuery(selector).ToHashSet().Contains);
+    }
 
     /// <summary>Gets ancestors until stop condition.</summary>
     public MarkdownDocument ParentsUntil(
         Func<INode, bool> stopPredicate,
         Func<INode, bool>? filter = null
-    ) => this.TraverseUntil(this.GetAncestors, stopPredicate, filter);
+    )
+    {
+        this.ThrowIfDisposed();
+        return this.TraverseUntil(this.GetAncestors, stopPredicate, filter);
+    }
 
     /// <summary>Gets closest ancestor (including self) matching condition.</summary>
     public MarkdownDocument Closest(Func<INode, bool> predicate)
     {
+        this.ThrowIfDisposed();
         ArgumentNullException.ThrowIfNull(predicate);
         var closest = this
             .currentNodes.Select(node =>
@@ -603,68 +717,125 @@ public partial class MarkdownDocument : IEnumerable<INode>
         return new MarkdownDocument(closest.Distinct(), this, this.PushCurrentSelection());
     }
 
-    public MarkdownDocument Closest(string selector) =>
-        this.Closest(this.ExecuteCssQuery(selector).ToHashSet().Contains);
+    public MarkdownDocument Closest(string selector)
+    {
+        this.ThrowIfDisposed();
+        return this.Closest(this.ExecuteCssQuery(selector).ToHashSet().Contains);
+    }
 
     /// <summary>Gets child elements of current selection.</summary>
-    public MarkdownDocument Children(Func<INode, bool>? filter = null) =>
-        this.TraverseRelated(node => node.Children, filter);
+    public MarkdownDocument Children(Func<INode, bool>? filter = null)
+    {
+        this.ThrowIfDisposed();
+        return this.TraverseRelated(node => node.Children, filter);
+    }
 
-    public MarkdownDocument Children(string selector) =>
-        this.Children(this.ExecuteCssQuery(selector).ToHashSet().Contains);
+    public MarkdownDocument Children(string selector)
+    {
+        this.ThrowIfDisposed();
+        return this.Children(this.ExecuteCssQuery(selector).ToHashSet().Contains);
+    }
 
     /// <summary>Gets all child elements (alias for Children).</summary>
-    public MarkdownDocument Contents() => this.Children();
+    public MarkdownDocument Contents()
+    {
+        this.ThrowIfDisposed();
+        return this.Children();
+    }
 
     /// <summary>Gets sibling elements of current selection.</summary>
-    public MarkdownDocument Siblings(Func<INode, bool>? filter = null) =>
-        this.TraverseRelated(node => this.GetSiblings(node, false), filter);
+    public MarkdownDocument Siblings(Func<INode, bool>? filter = null)
+    {
+        this.ThrowIfDisposed();
+        return this.TraverseRelated(node => this.GetSiblings(node, false), filter);
+    }
 
-    public MarkdownDocument Siblings(string selector) =>
-        this.Siblings(this.ExecuteCssQuery(selector).ToHashSet().Contains);
+    public MarkdownDocument Siblings(string selector)
+    {
+        this.ThrowIfDisposed();
+        return this.Siblings(this.ExecuteCssQuery(selector).ToHashSet().Contains);
+    }
 
     /// <summary>Gets next/previous siblings.</summary>
-    public MarkdownDocument Next(Func<INode, bool>? filter = null) =>
-        this.GetDirectionalSibling(1, filter);
+    public MarkdownDocument Next(Func<INode, bool>? filter = null)
+    {
+        this.ThrowIfDisposed();
+        return this.GetDirectionalSibling(1, filter);
+    }
 
-    public MarkdownDocument Next(string selector) =>
-        this.Next(this.ExecuteCssQuery(selector).ToHashSet().Contains);
+    public MarkdownDocument Next(string selector)
+    {
+        this.ThrowIfDisposed();
+        return this.Next(this.ExecuteCssQuery(selector).ToHashSet().Contains);
+    }
 
-    public MarkdownDocument Prev(Func<INode, bool>? filter = null) =>
-        this.GetDirectionalSibling(-1, filter);
+    public MarkdownDocument Prev(Func<INode, bool>? filter = null)
+    {
+        this.ThrowIfDisposed();
+        return this.GetDirectionalSibling(-1, filter);
+    }
 
-    public MarkdownDocument Prev(string selector) =>
-        this.Prev(this.ExecuteCssQuery(selector).ToHashSet().Contains);
+    public MarkdownDocument Prev(string selector)
+    {
+        this.ThrowIfDisposed();
+        return this.Prev(this.ExecuteCssQuery(selector).ToHashSet().Contains);
+    }
 
     /// <summary>Gets all following/preceding siblings.</summary>
-    public MarkdownDocument NextAll(Func<INode, bool>? filter = null) =>
-        this.GetRangeSiblings(1, int.MaxValue, filter);
+    public MarkdownDocument NextAll(Func<INode, bool>? filter = null)
+    {
+        this.ThrowIfDisposed();
+        return this.GetRangeSiblings(1, int.MaxValue, filter);
+    }
 
-    public MarkdownDocument NextAll(string selector) =>
-        this.NextAll(this.ExecuteCssQuery(selector).ToHashSet().Contains);
+    public MarkdownDocument NextAll(string selector)
+    {
+        this.ThrowIfDisposed();
+        return this.NextAll(this.ExecuteCssQuery(selector).ToHashSet().Contains);
+    }
 
-    public MarkdownDocument PrevAll(Func<INode, bool>? filter = null) =>
-        this.GetRangeSiblings(-int.MaxValue, -1, filter);
+    public MarkdownDocument PrevAll(Func<INode, bool>? filter = null)
+    {
+        this.ThrowIfDisposed();
+        return this.GetRangeSiblings(-int.MaxValue, -1, filter);
+    }
 
-    public MarkdownDocument PrevAll(string selector) =>
-        this.PrevAll(this.ExecuteCssQuery(selector).ToHashSet().Contains);
+    public MarkdownDocument PrevAll(string selector)
+    {
+        this.ThrowIfDisposed();
+        return this.PrevAll(this.ExecuteCssQuery(selector).ToHashSet().Contains);
+    }
 
     /// <summary>Gets following/preceding siblings until stop condition.</summary>
     public MarkdownDocument NextUntil(
         Func<INode, bool> stopPredicate,
         Func<INode, bool>? filter = null
-    ) => this.GetSiblingsUntil(1, stopPredicate, filter);
+    )
+    {
+        this.ThrowIfDisposed();
+        return this.GetSiblingsUntil(1, stopPredicate, filter);
+    }
 
-    public MarkdownDocument NextUntil(string stopSelector, string? filter = null) =>
-        this.GetSiblingsUntilSelector(1, stopSelector, filter);
+    public MarkdownDocument NextUntil(string stopSelector, string? filter = null)
+    {
+        this.ThrowIfDisposed();
+        return this.GetSiblingsUntilSelector(1, stopSelector, filter);
+    }
 
     public MarkdownDocument PrevUntil(
         Func<INode, bool> stopPredicate,
         Func<INode, bool>? filter = null
-    ) => this.GetSiblingsUntil(-1, stopPredicate, filter);
+    )
+    {
+        this.ThrowIfDisposed();
+        return this.GetSiblingsUntil(-1, stopPredicate, filter);
+    }
 
-    public MarkdownDocument PrevUntil(string stopSelector, string? filter = null) =>
-        this.GetSiblingsUntilSelector(-1, stopSelector, filter);
+    public MarkdownDocument PrevUntil(string stopSelector, string? filter = null)
+    {
+        this.ThrowIfDisposed();
+        return this.GetSiblingsUntilSelector(-1, stopSelector, filter);
+    }
 
     #endregion Traversal Methods
 
@@ -673,6 +844,7 @@ public partial class MarkdownDocument : IEnumerable<INode>
     /// <summary>Gets element at specified index.</summary>
     public MarkdownDocument ElementAt(Index index)
     {
+        this.ThrowIfDisposed();
         if (this.currentNodes.Count == 0)
             return new MarkdownDocument([], this, this.PushCurrentSelection());
         try
@@ -686,13 +858,22 @@ public partial class MarkdownDocument : IEnumerable<INode>
         }
     }
 
-    public MarkdownDocument First() => this.ElementAt(0);
+    public MarkdownDocument First()
+    {
+        this.ThrowIfDisposed();
+        return this.ElementAt(0);
+    }
 
-    public MarkdownDocument Last() => this.ElementAt(^1);
+    public MarkdownDocument Last()
+    {
+        this.ThrowIfDisposed();
+        return this.ElementAt(^1);
+    }
 
     /// <summary>Gets subset of elements in range.</summary>
     public MarkdownDocument Slice(Range range)
     {
+        this.ThrowIfDisposed();
         if (this.currentNodes.Count == 0)
             return new MarkdownDocument([], this, this.PushCurrentSelection());
         try
@@ -707,8 +888,11 @@ public partial class MarkdownDocument : IEnumerable<INode>
         }
     }
 
-    public MarkdownDocument Slice(int start, int? end = null) =>
-        this.Slice(start..(end ?? this.currentNodes.Count));
+    public MarkdownDocument Slice(int start, int? end = null)
+    {
+        this.ThrowIfDisposed();
+        return this.Slice(start..(end ?? this.currentNodes.Count));
+    }
 
     #endregion Index-based Selection
 
@@ -718,6 +902,7 @@ public partial class MarkdownDocument : IEnumerable<INode>
     public MarkdownDocument Add(IEnumerable<INode> nodes)
     {
         ArgumentNullException.ThrowIfNull(nodes);
+        this.ThrowIfDisposed();
         return new MarkdownDocument(
             this.currentNodes.Concat(nodes).Distinct(),
             this,
@@ -725,14 +910,24 @@ public partial class MarkdownDocument : IEnumerable<INode>
         );
     }
 
-    public MarkdownDocument Add(string selector) => this.Add(this.ExecuteCssQuery(selector));
+    public MarkdownDocument Add(string selector)
+    {
+        this.ThrowIfDisposed();
+        return this.Add(this.ExecuteCssQuery(selector));
+    }
 
-    public MarkdownDocument Add(Func<INode, bool> predicate) =>
-        this.Add(this.allNodes.Where(predicate));
+    public MarkdownDocument Add(Func<INode, bool> predicate)
+    {
+        this.ThrowIfDisposed();
+        return this.Add(this.allNodes.Where(predicate));
+    }
 
     /// <summary>Returns to previous selection in chain.</summary>
-    public MarkdownDocument End() =>
-        this.previousSelections.Count == 0 ? this : this.previousSelections.Pop();
+    public MarkdownDocument End()
+    {
+        this.ThrowIfDisposed();
+        return this.previousSelections.Count == 0 ? this : this.previousSelections.Pop();
+    }
 
     #endregion Set Operations
 
@@ -741,17 +936,23 @@ public partial class MarkdownDocument : IEnumerable<INode>
     /// <summary>Executes action for each selected element.</summary>
     public MarkdownDocument Each(Action<int, INode> action)
     {
+        this.ThrowIfDisposed();
         ArgumentNullException.ThrowIfNull(action);
         for (int i = 0; i < this.currentNodes.Count; i++)
             action(i, this.currentNodes[i]);
         return this;
     }
 
-    public MarkdownDocument Each(Action<INode> action) => this.Each((_, node) => action(node));
+    public MarkdownDocument Each(Action<INode> action)
+    {
+        this.ThrowIfDisposed();
+        return this.Each((_, node) => action(node));
+    }
 
     /// <summary>Transforms selected elements into a new enumerable for LINQ operations.</summary>
     public IEnumerable<T> Select<T>(Func<INode, T> selector)
     {
+        this.ThrowIfDisposed();
         ArgumentNullException.ThrowIfNull(selector);
         return this.currentNodes.Select(selector);
     }
@@ -759,22 +960,40 @@ public partial class MarkdownDocument : IEnumerable<INode>
     /// <summary>Transforms selected elements with index into a new enumerable for LINQ operations.</summary>
     public IEnumerable<T> Select<T>(Func<int, INode, T> selector)
     {
+        this.ThrowIfDisposed();
         ArgumentNullException.ThrowIfNull(selector);
         return this.currentNodes.Select((node, index) => selector(index, node));
     }
 
     /// <summary>Gets selected nodes or single element.</summary>
-    public IReadOnlyList<INode> Get() => this.currentNodes;
+    public IReadOnlyList<INode> Get()
+    {
+        this.ThrowIfDisposed();
+        return this.currentNodes;
+    }
 
-    public INode Get(Index index) => this.currentNodes[index];
+    public INode Get(Index index)
+    {
+        this.ThrowIfDisposed();
+        return this.currentNodes[index];
+    }
 
-    public INode? FirstOrDefault() => this.currentNodes.Count > 0 ? this.currentNodes[0] : null;
+    public INode? FirstOrDefault()
+    {
+        this.ThrowIfDisposed();
+        return this.currentNodes.Count > 0 ? this.currentNodes[0] : null;
+    }
 
-    public INode? LastOrDefault() => this.currentNodes.Count > 0 ? this.currentNodes[^1] : null;
+    public INode? LastOrDefault()
+    {
+        this.ThrowIfDisposed();
+        return this.currentNodes.Count > 0 ? this.currentNodes[^1] : null;
+    }
 
     /// <summary>Gets all text content from selected nodes as a single string.</summary>
     public string GetTextContent(string separator = " ")
     {
+        this.ThrowIfDisposed();
         var textNodes = this.currentNodes.OfType<TextNode>();
         return string.Join(
             separator,
@@ -783,8 +1002,10 @@ public partial class MarkdownDocument : IEnumerable<INode>
     }
 
     /// <summary>Gets statistics about the current selection.</summary>
-    public Dictionary<string, object> GetStatistics() =>
-        new()
+    public Dictionary<string, object> GetStatistics()
+    {
+        this.ThrowIfDisposed();
+        return new()
         {
             ["TotalNodes"] = this.Count,
             ["SelectedNodes"] = this.Length,
@@ -798,6 +1019,7 @@ public partial class MarkdownDocument : IEnumerable<INode>
             ["MaxDepth"] = this.currentNodes.Select(this.GetDepth).DefaultIfEmpty(0).Max(),
             ["WordCount"] = EstimateWordCount(this.GetTextContent()),
         };
+    }
 
     private static int EstimateWordCount(string text) =>
         string.IsNullOrWhiteSpace(text)
@@ -827,6 +1049,7 @@ public partial class MarkdownDocument : IEnumerable<INode>
     /// <summary>Gets all ancestor nodes of the specified node.</summary>
     public IEnumerable<INode> GetAncestors(INode node)
     {
+        this.ThrowIfDisposed();
         ArgumentNullException.ThrowIfNull(node);
         var parent = this.GetParent(node);
         while (parent != null)
@@ -839,6 +1062,7 @@ public partial class MarkdownDocument : IEnumerable<INode>
     /// <summary>Gets the immediate parent of the specified node.</summary>
     public INode? GetParent(INode node)
     {
+        this.ThrowIfDisposed();
         ArgumentNullException.ThrowIfNull(node);
         return node == this.root ? null : FindParent(this.root, node);
     }
@@ -846,6 +1070,7 @@ public partial class MarkdownDocument : IEnumerable<INode>
     /// <summary>Gets sibling nodes of the specified node.</summary>
     public IEnumerable<INode> GetSiblings(INode node, bool includeSelf = false)
     {
+        this.ThrowIfDisposed();
         ArgumentNullException.ThrowIfNull(node);
         var parent = this.GetParent(node);
         if (parent == null)
@@ -854,15 +1079,27 @@ public partial class MarkdownDocument : IEnumerable<INode>
     }
 
     /// <summary>Gets the depth of a node in the document.</summary>
-    public int GetDepth(INode node) => node == this.root ? 0 : this.GetAncestors(node).Count();
+    public int GetDepth(INode node)
+    {
+        this.ThrowIfDisposed();
+        return node == this.root ? 0 : this.GetAncestors(node).Count();
+    }
 
     #endregion Core Graph Methods
 
     #region IEnumerable Implementation
 
-    public IEnumerator<INode> GetEnumerator() => this.currentNodes.GetEnumerator();
+    public IEnumerator<INode> GetEnumerator()
+    {
+        this.ThrowIfDisposed();
+        return this.currentNodes.GetEnumerator();
+    }
 
-    IEnumerator IEnumerable.GetEnumerator() => this.GetEnumerator();
+    IEnumerator IEnumerable.GetEnumerator()
+    {
+        this.ThrowIfDisposed();
+        return this.GetEnumerator();
+    }
 
     #endregion IEnumerable Implementation
 
@@ -1121,4 +1358,71 @@ public partial class MarkdownDocument : IEnumerable<INode>
     private static partial Regex ParseNthFormulaPattern();
 
     #endregion Helper Methods
+
+    #region IDisposable Implementation
+
+    /// <summary>
+    /// Finalizer to ensure resources are released if Dispose is not called explicitly.
+    /// </summary>
+    ~MarkdownDocument()
+    {
+        this.Dispose(false);
+    }
+
+    /// <summary>
+    /// Releases all resources used by the MarkdownDocument.
+    /// </summary>
+    public void Dispose()
+    {
+        this.Dispose(true);
+        GC.SuppressFinalize(this);
+    }
+
+    /// <summary>
+    /// Releases the unmanaged resources used by the MarkdownDocument and optionally releases the managed resources.
+    /// </summary>
+    /// <param name="disposing">true to release both managed and unmanaged resources; false to release only unmanaged resources.</param>
+    protected virtual void Dispose(bool disposing)
+    {
+        if (!this.disposed)
+        {
+            if (disposing)
+            {
+                // Dispose managed resources only if this instance owns them
+                if (this.isOwner)
+                {
+                    // Clear and dispose collections
+                    foreach (var kvp in this.selectorIndex)
+                    {
+                        kvp.Value?.Clear();
+                    }
+                    this.selectorIndex?.Clear();
+
+                    foreach (var kvp in this.attributeIndex)
+                    {
+                        kvp.Value?.Clear();
+                    }
+                    this.attributeIndex?.Clear();
+
+                    this.allNodes?.Clear();
+                }
+
+                // Clear previousSelections but don't dispose them - they are references to parent documents
+                // that shouldn't be disposed when child documents are disposed
+                this.previousSelections?.Clear();
+
+                // Note: currentNodes is ReadOnlyCollection and doesn't need explicit disposal
+                // Note: root is a DocumentNode and would need to implement IDisposable if it had disposable resources
+            }
+
+            this.disposed = true;
+        }
+    }
+
+    /// <summary>
+    /// Throws an ObjectDisposedException if the instance has been disposed.
+    /// </summary>
+    private void ThrowIfDisposed() => ObjectDisposedException.ThrowIf(this.disposed, this);
+
+    #endregion IDisposable Implementation
 }
