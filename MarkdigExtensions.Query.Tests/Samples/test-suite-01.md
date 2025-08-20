@@ -1,4 +1,4 @@
-﻿# Welcome to the Test Suite
+# Welcome to the Test Suite
 
 This document is designed to test all the features of your Markdown query engine.  
 It includes examples of every supported selector, attribute, and combinator.
@@ -44,7 +44,7 @@ This line has **bold text** and *italic text* inside a paragraph.
 ```csharp
 // This is a fenced code block
 Console.WriteLine("Hello from C#");
-````
+```
 
 ```js
 // JavaScript example
@@ -65,7 +65,7 @@ alert("Hi!");
 
 Some text inside this H2. Also includes *italic text* and **bold text**.
 
-![Image inside heading](https://example.com/head-img.png)
+![Image inside heading](https://media.veefriends.com/image/upload/v1700083094/veefriends/specials/series2/characters/reflective-rhinoceros-manifesting-shrinkwrapped.png)
 
 ---
 
@@ -103,10 +103,6 @@ Some text inside this H2. Also includes *italic text* and **bold text**.
 
 ---
 
-````
-
----
-
 ## ✅ What This Covers
 
 | Feature                      | Example Line(s)                      |
@@ -124,3 +120,13 @@ Some text inside this H2. Also includes *italic text* and **bold text**.
 | Descendant: `heading emphasis` | Bold/italic inside heading         |
 | Child: `ul > link`           | Link directly inside UL item         |
 | OR: `link, image`            | All hyperlinks and images            |
+
+## 🧪 Test Cases
+
+**Release Date**
+
+2023-10-01
+
+## Test Case 1
+Links and Images
+

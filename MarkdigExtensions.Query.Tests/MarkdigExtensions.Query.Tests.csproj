@@ -7,10 +7,10 @@
     <AssemblyName>MarkdigExtensions.Query.Tests</AssemblyName>
   </PropertyGroup>
   <ItemGroup>
-    <None Remove="Samples\test-suite-01.md" />
+    <None Remove="Samples\*.md" />
   </ItemGroup>
   <ItemGroup>
-    <EmbeddedResource Include="Samples\test-suite-01.md">
+    <EmbeddedResource Include="Samples\*.md">
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
     </EmbeddedResource>
   </ItemGroup>

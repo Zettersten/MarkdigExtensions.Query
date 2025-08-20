@@ -1,558 +1,530 @@
-using System.Collections.Concurrent;
-using System.Runtime.CompilerServices;
-using System.Text.RegularExpressions;
+using Markdig;
+using Markdig.Extensions.Footnotes;
 using Markdig.Extensions.Tables;
+using Markdig.Extensions.TaskLists;
 using Markdig.Syntax;
 using Markdig.Syntax.Inlines;
-using static MarkdigExtensions.Query.SelectorPart;
+using MarkdigExtensions.Query.Builders;
+using MarkdigExtensions.Query.Models;
+using MarkdigExtensions.Query.Types;
+using MarkdownDocument = MarkdigExtensions.Query.Core.MarkdownDocument;
 
 namespace MarkdigExtensions.Query;
 
+/// <summary>
+/// Extension methods that add jQuery-style querying capabilities to Markdig's MarkdownDocument.
+/// This is the primary entry point for developers to convert Markdig documents to queryable documents
+/// and perform document analysis operations.
+/// </summary>
 public static partial class MarkdownQueryExtensions
 {
-    // Make this internal so MarkdownNode can access it
-    internal static readonly ConditionalWeakTable<
-        MarkdownDocument,
-        ConcurrentDictionary<MarkdownObject, MarkdownObject?>
-    > documentParentMaps = new();
+    #region Primary Conversion Methods
 
-    internal static readonly object documentParentMapsLock = new object();
-
-    internal static ConcurrentDictionary<MarkdownObject, MarkdownObject?> GetOrCreateParentMap(
-        MarkdownDocument doc
+    /// <summary>
+    /// Converts a Markdig MarkdownDocument to a queryable MarkdownDocument with jQuery-style API.
+    /// This is the primary extension method that enables all querying capabilities.
+    /// </summary>
+    /// <param name="markdigDocument">The Markdig document to convert</param>
+    /// <returns>A queryable MarkdownDocument with jQuery-style API</returns>
+    internal static MarkdownDocument ToQueryableDocument(
+        this Markdig.Syntax.MarkdownDocument markdigDocument
     )
     {
-        lock (documentParentMapsLock)
+        var builder = new DocumentBuilder();
+        builder.CreateDocument([0]);
+
+        var positionCounter = 1;
+
+        // Convert the Markdig document tree to our unified structure
+        foreach (var block in markdigDocument)
         {
-            return documentParentMaps.GetOrCreateValue(doc);
-        }
-    }
-
-    internal static bool TryGetParentMap(
-        MarkdownDocument doc,
-        out ConcurrentDictionary<MarkdownObject, MarkdownObject?> map
-    )
-    {
-        lock (documentParentMapsLock)
-        {
-            return documentParentMaps.TryGetValue(doc, out map);
-        }
-    }
-
-    public static IEnumerable<MarkdownNode> QueryBlocks(
-        this MarkdownDocument document,
-        string selector
-    )
-    {
-        var selectorGroups = ParseSelectorGroups(selector);
-
-        foreach (var node in Flatten(document))
-        {
-            foreach (var group in selectorGroups)
-            {
-                if (MatchesSelectorChain(node, group))
-                {
-                    yield return new MarkdownNode(node);
-                }
-            }
-        }
-    }
-
-    public static IEnumerable<MarkdownNode> QueryBlocks(this MarkdownNode node, string selector)
-    {
-        var selectorGroups = ParseSelectorGroups(selector);
-
-        var decedents = node.Node.Descendants().OfType<MarkdownObject>().ToList();
-
-        foreach (var descendant in decedents)
-        {
-            foreach (var group in selectorGroups)
-            {
-                if (MatchesSelectorChain(descendant, group))
-                {
-                    yield return new MarkdownNode(descendant);
-                }
-            }
-        }
-    }
-
-    public static MarkdownNode? QueryBlock(this MarkdownNode node, string selector)
-    {
-        var selectorGroups = ParseSelectorGroups(selector);
-
-        var decedents = node.Node.Descendants().OfType<MarkdownObject>().ToList();
-
-        foreach (var descendant in decedents)
-        {
-            foreach (var group in selectorGroups)
-            {
-                if (MatchesSelectorChain(descendant, group))
-                {
-                    return new MarkdownNode(descendant);
-                }
-            }
+            ConvertBlock(builder, block, ref positionCounter);
         }
 
-        return null;
-    }
-
-    public static MarkdownNode? QueryBlock(this MarkdownDocument document, string selector)
-    {
-        var selectorGroups = ParseSelectorGroups(selector);
-
-        foreach (var node in Flatten(document))
-        {
-            foreach (var group in selectorGroups)
-            {
-                if (MatchesSelectorChain(node, group))
-                {
-                    return new MarkdownNode(node);
-                }
-            }
-        }
-
-        return null;
-    }
-
-    internal static MarkdownObject? GetParent(MarkdownObject node)
-    {
-        var doc = GetDocumentForNode(node);
-        if (doc == null)
-            return null;
-
-        var docParentMap = documentParentMaps.GetOrCreateValue(doc);
-
-        return docParentMap.TryGetValue(node, out var parent) ? parent : null;
-    }
-
-    private static void RegisterParent(
-        MarkdownObject node,
-        MarkdownObject? parent,
-        MarkdownDocument doc
-    )
-    {
-        var parentMap = documentParentMaps.GetOrCreateValue(doc);
-        parentMap[node] = parent;
-    }
-
-    private static MarkdownDocument? GetDocumentForNode(MarkdownObject node)
-    {
-        if (node is MarkdownDocument doc)
-            return doc;
-
-        foreach (var docParentMapPair in documentParentMaps)
-        {
-            var parentMap = docParentMapPair.Value;
-
-            if (parentMap.ContainsKey(node))
-            {
-                var current = node;
-                while (current != null && !(current is MarkdownDocument))
-                {
-                    if (!parentMap.TryGetValue(current, out var parent))
-                        break;
-                    current = parent;
-                }
-
-                return current as MarkdownDocument;
-            }
-        }
-
-        return null;
+        return builder.Build();
     }
 
     /// <summary>
-    /// Gets the root document for a markdown node.
+    /// Converts a markdown string to a queryable MarkdownDocument using Markdig parser.
+    /// Supports all GFM (GitHub Flavored Markdown) features including tables, task lists, footnotes, and more.
+    /// Creates proper hierarchical structure with parent-child relationships and jQuery-style querying.
     /// </summary>
-    /// <param name="node">The markdown node to find the document for</param>
-    /// <returns>The root document containing the node, or null if not found</returns>
-    public static MarkdownDocument? GetDocumentRoot(this MarkdownObject node)
+    /// <param name="markdown">The markdown string to parse and convert</param>
+    /// <returns>A queryable MarkdownDocument with jQuery-style API</returns>
+    internal static MarkdownDocument ToQueryableDocument(this string markdown)
     {
-        // Direct case: node is already a document
-        if (node is MarkdownDocument doc)
-            return doc;
-
-        // Try to find the document through the parent mapping
-        var foundDoc = GetDocumentForNode(node);
-        if (foundDoc != null)
-            return foundDoc;
-
-        // Fallback: walk up the parent chain
-        var current = node;
-        while (current != null)
-        {
-            if (current is MarkdownDocument document)
-                return document;
-            current = GetParent(current);
-        }
-
-        return null;
+        var pipeline = new MarkdownPipelineBuilder().UseAdvancedExtensions().Build();
+        var markdigDocument = Markdown.Parse(markdown, pipeline);
+        return markdigDocument.ToQueryableDocument();
     }
 
-    internal static IEnumerable<MarkdownObject> Flatten(MarkdownObject root)
-    {
-        var doc = root as MarkdownDocument;
-        if (doc != null)
+    #endregion
+
+    #region Document Analysis Extensions
+
+    /// <summary>
+    /// Gets comprehensive statistics about the markdown document.
+    /// Provides counts of different node types and structural information.
+    /// </summary>
+    /// <param name="document">The queryable markdown document</param>
+    /// <returns>A dictionary containing various document statistics</returns>
+    public static Dictionary<string, object> GetDocumentStatistics(
+        this MarkdownDocument document
+    ) =>
+        new()
         {
-            // Pre-build parent map for this document in a thread-safe way
-            BuildParentMap(doc);
+            ["TotalNodes"] = document.Count,
+            ["SelectedNodes"] = document.Length,
+            ["HeadingCount"] = document.GetHeadings().Get().Count,
+            ["ParagraphCount"] = document.GetParagraphs().Get().Count,
+            ["LinkCount"] = document.GetLinks().Get().Count,
+            ["ImageCount"] = document.GetImages().Get().Count,
+            ["CodeBlockCount"] = document.GetCodeBlocks().Get().Count,
+            ["ListCount"] = document.GetLists().Get().Count,
+            ["TableCount"] = document.GetTables().Get().Count,
+            ["MaxDepth"] = document.AllNodes.Select(document.GetDepth).DefaultIfEmpty(0).Max(),
+        };
+
+    /// <summary>
+    /// Analyzes the document structure and returns a hierarchical outline.
+    /// Useful for generating table of contents or understanding document organization.
+    /// </summary>
+    /// <param name="document">The queryable markdown document</param>
+    /// <returns>A structured outline of the document</returns>
+    public static List<DocumentOutlineItem> GetDocumentOutline(this MarkdownDocument document)
+    {
+        var outline = new List<DocumentOutlineItem>();
+        var headings = document.GetHeadings().Get();
+
+        foreach (var heading in headings.Cast<HeadingNode>())
+        {
+            outline.Add(
+                new DocumentOutlineItem
+                {
+                    Level = heading.Level,
+                    Title = heading.Value ?? string.Empty,
+                    Position = heading.Position,
+                }
+            );
         }
 
-        // Now yield nodes without modifying shared state
-        return FlattenWithoutParentMapUpdates(root);
+        return outline;
     }
 
-    private static void BuildParentMap(MarkdownDocument doc)
+    /// <summary>
+    /// Extracts all links from the document for analysis.
+    /// Returns both internal and external links with their context.
+    /// </summary>
+    /// <param name="document">The queryable markdown document</param>
+    /// <returns>A list of link analysis objects</returns>
+    public static List<LinkAnalysisItem> AnalyzeLinks(this MarkdownDocument document)
     {
-        // Get the parent map in a thread-safe way
-        var parentMap = GetOrCreateParentMap(doc);
+        var links = new List<LinkAnalysisItem>();
+        var linkNodes = document.GetLinks().Get();
 
-        Stack<(MarkdownObject node, MarkdownObject? parent)> stack = new();
-        stack.Push((doc, null));
-
-        while (stack.Count > 0)
+        foreach (var link in linkNodes.Cast<LinkNode>())
         {
-            var (node, parent) = stack.Pop();
+            var isExternal =
+                !string.IsNullOrEmpty(link.Url)
+                && (link.Url.StartsWith("http://") || link.Url.StartsWith("https://"));
 
-            // Use thread-safe ConcurrentDictionary methods
-            parentMap.AddOrUpdate(node, parent, (_, _) => parent);
+            links.Add(
+                new LinkAnalysisItem
+                {
+                    Url = link.Url ?? string.Empty,
+                    Title = link.Title,
+                    Text = link.Value ?? string.Empty,
+                    IsExternal = isExternal,
+                    Position = link.Position,
+                }
+            );
+        }
 
-            if (node is ContainerBlock cb)
-            {
-                foreach (var child in cb.Reverse())
-                    stack.Push((child, node));
-            }
+        return links;
+    }
 
-            if (node is LeafBlock lb && lb.Inline != null)
-            {
-                BuildInlineParentMap(lb.Inline, node, doc);
-            }
+    #endregion
+
+    #region Internal Conversion Implementation
+
+    private static void ConvertBlock(DocumentBuilder builder, Block block, ref int positionCounter)
+    {
+        var position = new[] { positionCounter++ };
+
+        switch (block)
+        {
+            case HeadingBlock heading:
+
+                _ = builder.AddHeading(position, heading.Level, ExtractText(heading.Inline));
+
+                SetMarkdigRef(builder, heading);
+                if (heading.Inline != null)
+                {
+                    builder.PushContext();
+                    ConvertInlines(builder, heading.Inline, ref positionCounter);
+                    builder.PopContext();
+                }
+                break;
+
+            case ParagraphBlock paragraph:
+                builder.AddParagraph(position);
+                SetMarkdigRef(builder, paragraph);
+                if (paragraph.Inline != null)
+                {
+                    builder.PushContext();
+                    ConvertInlines(builder, paragraph.Inline, ref positionCounter);
+                    builder.PopContext();
+                }
+                break;
+
+            case QuoteBlock quote:
+                builder.AddBlockQuote(position);
+                SetMarkdigRef(builder, quote);
+                builder.PushContext();
+                foreach (var childBlock in quote)
+                {
+                    ConvertBlock(builder, childBlock, ref positionCounter);
+                }
+                builder.PopContext();
+                break;
+
+            case CodeBlock codeBlock:
+                var fenceInfo = codeBlock is FencedCodeBlock fenced ? fenced.Info : null;
+                builder.AddCodeBlock(position, fenceInfo, codeBlock.Lines.ToString());
+                SetMarkdigRef(builder, codeBlock);
+                break;
+
+            case ListBlock list:
+                var listType = list.IsOrdered ? ListType.Ordered : ListType.Bullet;
+                var delimiter =
+                    list.IsOrdered && list.OrderedDelimiter == '.'
+                        ? ListDelimiter.Period
+                        : ListDelimiter.Paren;
+                var startNumber = list.IsOrdered
+                    ? (int.TryParse(list.OrderedStart, out var start) ? start : 1)
+                    : 1;
+                var isTight = true; // Default to tight, Markdig doesn't expose this directly
+
+                builder.AddList(position, listType, delimiter, startNumber, isTight);
+                SetMarkdigRef(builder, list);
+                builder.PushContext();
+
+                foreach (ListItemBlock listItem in list.Cast<ListItemBlock>())
+                {
+                    var itemPosition = new[] { positionCounter++ };
+
+                    // Check for task list item
+                    bool isChecked = false;
+                    bool hasCheckbox = false;
+
+                    if (listItem.Count > 0 && listItem[0] is ParagraphBlock firstPara)
+                    {
+                        if (firstPara.Inline?.FirstChild is TaskList taskList)
+                        {
+                            hasCheckbox = true;
+                            isChecked = taskList.Checked;
+                        }
+                    }
+
+                    builder.AddListItem(itemPosition, isChecked, hasCheckbox);
+                    SetMarkdigRef(builder, listItem);
+                    builder.PushContext();
+
+                    foreach (var itemBlock in listItem)
+                    {
+                        ConvertBlock(builder, itemBlock, ref positionCounter);
+                    }
+
+                    builder.PopContext();
+                }
+
+                builder.PopContext();
+                break;
+
+            case ThematicBreakBlock:
+                builder.AddThematicBreak(position);
+                SetMarkdigRef(builder, block);
+                break;
+
+            case HtmlBlock htmlBlock:
+                var htmlContent = htmlBlock.Lines.ToString();
+                builder.AddHtmlBlock(position, htmlContent);
+                SetMarkdigRef(builder, htmlBlock);
+                break;
+
+            case Table table:
+                builder.AddTable(position);
+                SetMarkdigRef(builder, table);
+                builder.PushContext();
+
+                // Add header row if exists
+                if (table.Count > 0)
+                {
+                    if (table[0] is TableRow headerRow)
+                    {
+                        var headerRowPosition = new[] { positionCounter++ };
+                        builder.AddTableRow(headerRowPosition, true);
+                        SetMarkdigRef(builder, headerRow);
+                        builder.PushContext();
+
+                        for (int i = 0; i < headerRow.Count; i++)
+                        {
+                            if (headerRow[i] is TableCell cell)
+                            {
+                                var cellPosition = new[] { positionCounter++ };
+                                var alignment = ConvertTableAlignment(
+                                    table.ColumnDefinitions[i].Alignment
+                                );
+                                builder.AddTableCell(cellPosition, true, alignment);
+                                SetMarkdigRef(builder, cell);
+
+                                builder.PushContext();
+                                // Convert cell content - TableCell contains blocks, not inlines
+                                foreach (var cellBlock in cell)
+                                {
+                                    ConvertBlock(builder, cellBlock, ref positionCounter);
+                                }
+                                builder.PopContext();
+                            }
+                        }
+
+                        builder.PopContext();
+                    }
+
+                    // Add data rows
+                    for (int rowIndex = 1; rowIndex < table.Count; rowIndex++)
+                    {
+                        if (table[rowIndex] is TableRow dataRow)
+                        {
+                            var dataRowPosition = new[] { positionCounter++ };
+                            builder.AddTableRow(dataRowPosition, false);
+                            SetMarkdigRef(builder, dataRow);
+                            builder.PushContext();
+
+                            for (int i = 0; i < dataRow.Count; i++)
+                            {
+                                if (dataRow[i] is TableCell cell)
+                                {
+                                    var cellPosition = new[] { positionCounter++ };
+                                    var alignment =
+                                        i < table.ColumnDefinitions.Count
+                                            ? ConvertTableAlignment(
+                                                table.ColumnDefinitions[i].Alignment
+                                            )
+                                            : TableCellNode.TableCellAlignment.None;
+                                    builder.AddTableCell(cellPosition, false, alignment);
+                                    SetMarkdigRef(builder, cell);
+
+                                    builder.PushContext();
+                                    // Convert cell content - TableCell contains blocks, not inlines
+                                    foreach (var cellBlock in cell)
+                                    {
+                                        ConvertBlock(builder, cellBlock, ref positionCounter);
+                                    }
+                                    builder.PopContext();
+                                }
+                            }
+
+                            builder.PopContext();
+                        }
+                    }
+                }
+
+                builder.PopContext();
+                break;
+
+            case FootnoteGroup footnoteGroup:
+                foreach (var footnote in footnoteGroup)
+                {
+                    if (footnote is Footnote footnoteBlock)
+                    {
+                        var footnotePosition = new[] { positionCounter++ };
+                        builder.AddFootnoteDefinition(footnotePosition, footnoteBlock.Label);
+                        SetMarkdigRef(builder, footnoteBlock);
+                        builder.PushContext();
+
+                        foreach (var footnoteChildBlock in footnoteBlock)
+                        {
+                            ConvertBlock(builder, footnoteChildBlock, ref positionCounter);
+                        }
+
+                        builder.PopContext();
+                    }
+                }
+                break;
+
+            // Handle container blocks that might contain other blocks
+            case ContainerBlock container:
+                foreach (var childBlock in container)
+                {
+                    ConvertBlock(builder, childBlock, ref positionCounter);
+                }
+                break;
         }
     }
 
-    private static void BuildInlineParentMap(
-        ContainerInline container,
-        MarkdownObject parent,
-        MarkdownDocument doc
+    private static void ConvertInlines(
+        DocumentBuilder builder,
+        ContainerInline? container,
+        ref int positionCounter
     )
     {
-        var parentMap = GetOrCreateParentMap(doc);
-        foreach (var child in container)
-        {
-            // Use thread-safe ConcurrentDictionary methods
-            parentMap.AddOrUpdate(child, parent, (_, _) => parent);
+        if (container == null)
+            return;
 
-            if (child is ContainerInline ci)
-            {
-                BuildInlineParentMap(ci, child, doc);
-            }
+        foreach (var inline in container)
+        {
+            ConvertInline(builder, inline, ref positionCounter);
         }
     }
 
-    private static IEnumerable<MarkdownObject> FlattenWithoutParentMapUpdates(MarkdownObject root)
-    {
-        Stack<MarkdownObject> stack = new();
-        stack.Push(root);
-
-        while (stack.Count > 0)
-        {
-            var node = stack.Pop();
-            yield return node;
-
-            if (node is ContainerBlock cb)
-            {
-                foreach (var child in cb.Reverse())
-                    stack.Push(child);
-            }
-
-            if (node is LeafBlock lb && lb.Inline != null)
-            {
-                foreach (var inline in FlattenInlineWithoutUpdates(lb.Inline))
-                    yield return inline;
-            }
-        }
-    }
-
-    private static IEnumerable<MarkdownObject> FlattenInlineWithoutUpdates(
-        ContainerInline container
+    private static void ConvertInline(
+        DocumentBuilder builder,
+        Inline inline,
+        ref int positionCounter
     )
     {
-        foreach (var child in container)
-        {
-            yield return child;
+        var position = new[] { positionCounter++ };
 
-            if (child is ContainerInline ci)
-            {
-                foreach (var sub in FlattenInlineWithoutUpdates(ci))
-                    yield return sub;
-            }
+        switch (inline)
+        {
+            case LiteralInline literal:
+                builder.AddText(position, literal.Content.ToString());
+                SetMarkdigRef(builder, literal);
+                break;
+
+            case EmphasisInline emphasis:
+                if (emphasis.DelimiterChar == '*' || emphasis.DelimiterChar == '_')
+                {
+                    if (emphasis.DelimiterCount == 1)
+                    {
+                        builder.AddEmph(position);
+                        SetMarkdigRef(builder, emphasis);
+                        builder.PushContext();
+                        ConvertInlines(builder, emphasis, ref positionCounter);
+                        builder.PopContext();
+                    }
+                    else if (emphasis.DelimiterCount == 2)
+                    {
+                        builder.AddStrong(position);
+                        SetMarkdigRef(builder, emphasis);
+                        builder.PushContext();
+                        ConvertInlines(builder, emphasis, ref positionCounter);
+                        builder.PopContext();
+                    }
+                }
+                break;
+
+            case LinkInline link:
+                if (link.IsImage)
+                {
+                    // Handle as image
+                    builder.AddImage(position, link.Url, null, link.Title);
+                    SetMarkdigRef(builder, link);
+                    builder.PushContext();
+                    ConvertInlines(builder, link, ref positionCounter);
+                    builder.PopContext();
+                }
+                else
+                {
+                    // Handle as regular link
+                    builder.AddLink(position, link.Url, link.Title);
+                    SetMarkdigRef(builder, link);
+                    builder.PushContext();
+                    ConvertInlines(builder, link, ref positionCounter);
+                    builder.PopContext();
+                }
+                break;
+
+            case AutolinkInline autolink:
+                builder.AddLink(position, autolink.Url, null, autolink.Url);
+                SetMarkdigRef(builder, autolink);
+                break;
+
+            case CodeInline code:
+                builder.AddCode(position, code.Content);
+                SetMarkdigRef(builder, code);
+                break;
+
+            case HtmlInline html:
+                builder.AddHtmlInline(position, html.Tag);
+                SetMarkdigRef(builder, html);
+                break;
+
+            case LineBreakInline lineBreak:
+                if (lineBreak.IsHard)
+                {
+                    builder.AddLineBreak(position);
+                    SetMarkdigRef(builder, lineBreak);
+                }
+                else
+                {
+                    builder.AddSoftBreak(position);
+                    SetMarkdigRef(builder, lineBreak);
+                }
+                break;
+
+            case FootnoteLink footnoteLink:
+                builder.AddFootnoteReference(position, footnoteLink.Index.ToString());
+                SetMarkdigRef(builder, footnoteLink);
+                break;
+
+            case ContainerInline containerInline:
+                ConvertInlines(builder, containerInline, ref positionCounter);
+                break;
+
+            // Handle special cases
+            case TaskList:
+                // Task list markers are handled at the list item level
+                break;
+
+            default:
+                // For any unhandled inline types, try to extract text content
+                var text = ExtractText(inline);
+                if (!string.IsNullOrEmpty(text))
+                {
+                    builder.AddText(position, text);
+                    SetMarkdigRef(builder, inline);
+                }
+                break;
         }
     }
 
-    private static bool MatchesSelectorChain(MarkdownObject node, List<SelectorPart> chain)
+    /// <summary>
+    /// Sets the MarkdigRef property on the most recently added node in the builder.
+    /// </summary>
+    private static void SetMarkdigRef(DocumentBuilder builder, IMarkdownObject markdigObject)
     {
-        if (chain.Count == 0)
-        {
-            return false;
-        }
-
-        return MatchFromLeaf(node, chain.Count - 1);
-
-        bool MatchFromLeaf(MarkdownObject current, int depth)
-        {
-            if (depth < 0)
-                return true;
-
-            var selectorPart = chain[depth];
-
-            if (
-                !IsMatch(
-                    current,
-                    selectorPart.Tag,
-                    selectorPart.AttributeKey,
-                    selectorPart.AttributeValue
-                )
-            )
-            {
-                return false;
-            }
-
-            if (!MatchesPseudo(current, selectorPart.PseudoSelector))
-            {
-                return false;
-            }
-
-            if (depth == 0)
-            {
-                return true;
-            }
-
-            return selectorPart.Combinator switch
-            {
-                CombinatorType.DirectChild => GetParent(current) is { } parent
-                    && MatchFromLeaf(parent, depth - 1),
-
-                CombinatorType.Descendant => WalkAncestors(current)
-                    .Any(ancestor => MatchFromLeaf(ancestor, depth - 1)),
-
-                _ => false,
-            };
-        }
-
-        static IEnumerable<MarkdownObject> WalkAncestors(MarkdownObject start)
-        {
-            var current = GetParent(start);
-            while (current != null)
-            {
-                yield return current;
-                current = GetParent(current);
-            }
-        }
+        builder.SetMarkdigRef(markdigObject);
     }
 
-    private static bool IsMatch(MarkdownObject obj, string tag, string? attrKey, string? attrVal)
+    private static string ExtractText(Inline? inline)
     {
-        tag = tag.ToLowerInvariant();
+        if (inline == null)
+            return string.Empty;
 
-        if (tag == "*")
+        return inline switch
         {
-            return true;
-        }
-
-        return tag switch
-        {
-            "heading" => obj is HeadingBlock h
-                && (attrKey == null || (attrKey == "level" && attrVal == h.Level.ToString())),
-
-            "paragraph" => obj is ParagraphBlock,
-
-            "link" => obj is LinkInline li
-                && !li.IsImage
-                && (
-                    attrKey == null
-                    || (
-                        (
-                            attrKey == "url"
-                            && string.Equals(li.Url, attrVal, StringComparison.OrdinalIgnoreCase)
-                        )
-                        || (
-                            attrKey == "href"
-                            && string.Equals(li.Url, attrVal, StringComparison.OrdinalIgnoreCase)
-                        )
-                    )
-                ),
-
-            "image" => obj is LinkInline img
-                && img.IsImage
-                && (
-                    attrKey == null
-                    || (
-                        attrKey == "src"
-                        && string.Equals(img.Url, attrVal, StringComparison.OrdinalIgnoreCase)
-                    )
-                ),
-
-            "emphasis" => obj is EmphasisInline em && em.DelimiterCount == 1,
-
-            "strong" => obj is EmphasisInline st && st.DelimiterCount >= 2,
-
-            "codeblock" => obj is FencedCodeBlock cb
-                && (
-                    attrKey == null
-                    || (
-                        attrKey == "language"
-                        && string.Equals(cb.Info, attrVal, StringComparison.OrdinalIgnoreCase)
-                    )
-                ),
-
-            "table" => obj is Table,
-
-            "ol" => obj is ListBlock list && list.IsOrdered,
-
-            "ul" => obj is ListBlock list && !list.IsOrdered,
-
-            "li" => obj is ListItemBlock li
-                && (
-                    attrKey == null
-                    || (
-                        (attrKey == "index" && li.Order.ToString() == attrVal)
-                        || attrKey == "order" && li.Order.ToString() == attrVal
-                    )
-                ),
-
-            "blockquote" => obj is QuoteBlock,
-
-            "html" => obj is HtmlBlock,
-
-            "thematicbreak" => obj is ThematicBreakBlock,
-
-            _ => false,
+            LiteralInline literal => literal.Content.ToString(),
+            ContainerInline container => string.Concat(container.Select(ExtractText)),
+            CodeInline code => code.Content,
+            AutolinkInline autolink => autolink.Url,
+            _ => string.Empty,
         };
     }
 
-    private static List<SelectorPart> ParseSelectorChain(string selectorChain)
+    private static TableCellNode.TableCellAlignment ConvertTableAlignment(
+        TableColumnAlign? alignment
+    )
     {
-        var parts = new List<SelectorPart>();
-        var tokens = SelectorChainPattern().Split(selectorChain);
-
-        var currentCombinator = CombinatorType.Descendant;
-
-        foreach (var token in tokens)
+        return alignment switch
         {
-            var t = token.Trim();
-            if (string.IsNullOrEmpty(t))
-                continue;
-
-            if (t == ">")
-            {
-                currentCombinator = CombinatorType.DirectChild;
-            }
-            else
-            {
-                var normalized = NormalizeSelector(t);
-
-                var match = PsuedoSelectorPattern().Match(normalized);
-
-                var tag = match.Groups["tag"].Value;
-                var attrKey = match.Groups["attr"].Success ? match.Groups["attr"].Value : null;
-                var attrVal = match.Groups["val"].Success ? match.Groups["val"].Value : null;
-                var pseudo = match.Groups["pseudo"].Success ? match.Groups["pseudo"].Value : null;
-
-                parts.Add(new SelectorPart(tag, attrKey, attrVal, currentCombinator, pseudo));
-                currentCombinator = CombinatorType.Descendant;
-            }
-        }
-
-        return parts;
-    }
-
-    private static List<List<SelectorPart>> ParseSelectorGroups(string selector)
-    {
-        return
-        [
-            .. selector
-                .Split(',')
-                .Select(s => s.Trim())
-                .Where(s => !string.IsNullOrWhiteSpace(s))
-                .Select(ParseSelectorChain),
-        ];
-    }
-
-    private static bool MatchesPseudo(MarkdownObject obj, string? pseudo)
-    {
-        if (string.IsNullOrWhiteSpace(pseudo))
-            return true;
-
-        var parent = GetParent(obj);
-
-        if (parent is not ContainerBlock)
-        {
-            return false;
-        }
-
-        var siblings = parent switch
-        {
-            ContainerBlock block => [.. block.Cast<MarkdownObject>()],
-            ContainerInline inline => inline.Cast<MarkdownObject>().ToList(),
-            _ => null,
-        };
-
-        if (siblings == null)
-            return false;
-
-        var index = siblings.IndexOf(obj);
-
-        return pseudo switch
-        {
-            "first-child" => index == 0,
-            "last-child" => index == siblings.Count - 1,
-            "even" => index % 2 == 0,
-            "odd" => index % 2 == 1,
-            var p when p.StartsWith("nth-child(") && p.EndsWith(')') => int.TryParse(
-                p["nth-child(".Length..^1],
-                out var n
-            )
-                && index == (n - 1),
-            _ => false,
+            TableColumnAlign.Left => TableCellNode.TableCellAlignment.Left,
+            TableColumnAlign.Center => TableCellNode.TableCellAlignment.Center,
+            TableColumnAlign.Right => TableCellNode.TableCellAlignment.Right,
+            _ => TableCellNode.TableCellAlignment.None,
         };
     }
 
-    private static string NormalizeSelector(string selector)
-    {
-        return selector switch
-        {
-            "html" => "html",
-            "a" => "link",
-            "link" => "link",
-            "b" => "strong",
-            "i" => "emphasis",
-            "em" => "emphasis",
-            "img" => "image",
-            "p" => "paragraph",
-            "ol" => "ol",
-            "ul" => "ul",
-            "blockquote" => "blockquote",
-            "hr" => "thematicbreak",
-            "code" => "codeblock",
-            "table" => "table",
-            var s when HeadingLevelPattern().IsMatch(s) => $"heading[level={s[1]}]",
-            _ => selector,
-        };
-    }
-
-    public static void ReleaseDocument(MarkdownDocument document)
-    {
-        documentParentMaps.Remove(document);
-    }
-
-    [GeneratedRegex(@"h[1-6]")]
-    private static partial Regex HeadingLevelPattern();
-
-    [GeneratedRegex(@"(?<=[^\s>])\s*(>)\s*|\s+")]
-    private static partial Regex SelectorChainPattern();
-
-    [GeneratedRegex(
-        @"^(?<tag>[^\[:]+|\*)(\[(?<attr>[^\]=]+)=?(?<val>[^\]]*)\])?(:(?<pseudo>.+))?$"
-    )]
-    private static partial Regex PsuedoSelectorPattern();
+    #endregion
 }
