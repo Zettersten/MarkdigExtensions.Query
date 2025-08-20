@@ -20,6 +20,7 @@ public partial class MarkdownDocument : IEnumerable<INode>
 
     // CSS selector parsing regex patterns
     private static readonly Regex attributeSelectorRegex = AttributeSelectorRegexPattern();
+
     private static readonly Regex attributeValueRegex = AttributeRegexPattern();
 
     // Internal constructor for creating filtered document views
@@ -67,7 +68,7 @@ public partial class MarkdownDocument : IEnumerable<INode>
     /// <summary>Gets the number of currently selected nodes.</summary>
     public int Length => this.currentNodes.Count;
 
-    #endregion
+    #endregion Properties
 
     #region CSS Selector Querying (Integrated QueryEngine functionality)
 
@@ -246,28 +247,40 @@ public partial class MarkdownDocument : IEnumerable<INode>
         foreach (var element in sourceElements)
         {
             var relatedNodes = getRelatedNodes(element);
-            
+
             if (combinator == ' ')
             {
                 // For descendant combinator, use full CSS query
-                var tempDoc = new MarkdownDocument(new DocumentNode([0], children: [.. relatedNodes]));
+                var tempDoc = new MarkdownDocument(
+                    new DocumentNode([0], children: [.. relatedNodes])
+                );
                 results.AddRange(tempDoc.ExecuteCssQuery(targetSelector));
             }
             else
             {
                 // For child combinator (>), directly filter the related nodes
                 // This avoids the temp document complexity for simple child relationships
-                var (elementSelector, attributeSelectors, pseudoClass) = ParseSelector(targetSelector);
-                
+                var (elementSelector, attributeSelectors, pseudoClass) = ParseSelector(
+                    targetSelector
+                );
+
                 IEnumerable<INode> candidateNodes = !string.IsNullOrEmpty(elementSelector)
                     ? elementSelector == "*"
                         ? relatedNodes
-                        : relatedNodes.Where(node => 
-                            node is Node concreteNode && concreteNode.Selectors.Contains(elementSelector, StringComparer.OrdinalIgnoreCase))
+                        : relatedNodes.Where(node =>
+                            node is Node concreteNode
+                            && concreteNode.Selectors.Contains(
+                                elementSelector,
+                                StringComparer.OrdinalIgnoreCase
+                            )
+                        )
                     : relatedNodes;
 
                 // Apply attribute filters
-                candidateNodes = attributeSelectors.Aggregate(candidateNodes, this.ApplyAttributeSelector);
+                candidateNodes = attributeSelectors.Aggregate(
+                    candidateNodes,
+                    this.ApplyAttributeSelector
+                );
 
                 // Apply pseudo-class filter
                 if (!string.IsNullOrEmpty(pseudoClass))
@@ -409,7 +422,7 @@ public partial class MarkdownDocument : IEnumerable<INode>
         return result;
     }
 
-    #endregion
+    #endregion CSS Selector Querying (Integrated QueryEngine functionality)
 
     #region Type-based Querying
 
@@ -458,7 +471,7 @@ public partial class MarkdownDocument : IEnumerable<INode>
     /// <summary>Gets all table nodes.</summary>
     public MarkdownDocument GetTables() => this.GetNodes<TableNode>();
 
-    #endregion
+    #endregion Type-based Querying
 
     #region Filtering & Selection
 
@@ -553,7 +566,7 @@ public partial class MarkdownDocument : IEnumerable<INode>
         return this.currentNodes.Any(matchingNodes.Contains);
     }
 
-    #endregion
+    #endregion Filtering & Selection
 
     #region Traversal Methods
 
@@ -653,7 +666,7 @@ public partial class MarkdownDocument : IEnumerable<INode>
     public MarkdownDocument PrevUntil(string stopSelector, string? filter = null) =>
         this.GetSiblingsUntilSelector(-1, stopSelector, filter);
 
-    #endregion
+    #endregion Traversal Methods
 
     #region Index-based Selection
 
@@ -697,7 +710,7 @@ public partial class MarkdownDocument : IEnumerable<INode>
     public MarkdownDocument Slice(int start, int? end = null) =>
         this.Slice(start..(end ?? this.currentNodes.Count));
 
-    #endregion
+    #endregion Index-based Selection
 
     #region Set Operations
 
@@ -721,7 +734,7 @@ public partial class MarkdownDocument : IEnumerable<INode>
     public MarkdownDocument End() =>
         this.previousSelections.Count == 0 ? this : this.previousSelections.Pop();
 
-    #endregion
+    #endregion Set Operations
 
     #region Transformation & Utility Operations
 
@@ -791,7 +804,7 @@ public partial class MarkdownDocument : IEnumerable<INode>
             ? 0
             : text.Split([' ', '\t', '\n', '\r'], StringSplitOptions.RemoveEmptyEntries).Length;
 
-    #endregion
+    #endregion Transformation & Utility Operations
 
     #region Core Graph Methods
 
@@ -843,7 +856,7 @@ public partial class MarkdownDocument : IEnumerable<INode>
     /// <summary>Gets the depth of a node in the document.</summary>
     public int GetDepth(INode node) => node == this.root ? 0 : this.GetAncestors(node).Count();
 
-    #endregion
+    #endregion Core Graph Methods
 
     #region IEnumerable Implementation
 
@@ -851,7 +864,7 @@ public partial class MarkdownDocument : IEnumerable<INode>
 
     IEnumerator IEnumerable.GetEnumerator() => this.GetEnumerator();
 
-    #endregion
+    #endregion IEnumerable Implementation
 
     #region Helper Methods
 
@@ -1107,5 +1120,5 @@ public partial class MarkdownDocument : IEnumerable<INode>
     [GeneratedRegex(@"^(\d*)n(?:([+-])(\d+))?$")]
     private static partial Regex ParseNthFormulaPattern();
 
-    #endregion
+    #endregion Helper Methods
 }

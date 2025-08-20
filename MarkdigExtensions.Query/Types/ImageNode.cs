@@ -1,6 +1,10 @@
 namespace MarkdigExtensions.Query.Types;
 
-public class ImageNode(
+/// <summary>
+/// Represents an image node in the markdown document.
+/// Contains URL, alt text, title, and other image-related information.
+/// </summary>
+public sealed class ImageNode(
     int[] position,
     string? url = null,
     string? alt = null,
@@ -23,11 +27,23 @@ public class ImageNode(
         children
     )
 {
+    /// <summary>
+    /// Gets the CSS selectors that can be used to match this image node.
+    /// </summary>
     public override string[] Selectors => ["image", "img"];
 
+    /// <summary>
+    /// Gets the URL/source of the image.
+    /// </summary>
     public string? Url => url;
 
+    /// <summary>
+    /// Gets the alt text of the image.
+    /// </summary>
     public string? Alt => alt;
 
+    /// <summary>
+    /// Gets the title attribute of the image, if present.
+    /// </summary>
     public string? Title => title;
 }

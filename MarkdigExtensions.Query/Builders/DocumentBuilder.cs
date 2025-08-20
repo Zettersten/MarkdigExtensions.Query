@@ -1,6 +1,5 @@
-using MarkdigExtensions.Query.Core;
-using MarkdigExtensions.Query.Types;
 using Markdig.Syntax;
+using MarkdigExtensions.Query.Types;
 using CoreMarkdownDocument = MarkdigExtensions.Query.Core.MarkdownDocument;
 
 namespace MarkdigExtensions.Query.Builders;

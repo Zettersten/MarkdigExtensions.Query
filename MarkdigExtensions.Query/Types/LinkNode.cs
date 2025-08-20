@@ -1,6 +1,10 @@
 namespace MarkdigExtensions.Query.Types;
 
-public class LinkNode(
+/// <summary>
+/// Represents a hyperlink node in the markdown document.
+/// Contains URL, title, and link text information.
+/// </summary>
+public sealed class LinkNode(
     int[] position,
     string? url = null,
     string? title = null,
@@ -16,8 +20,18 @@ public class LinkNode(
         children
     )
 {
+    /// <summary>
+    /// Gets the CSS selectors that can be used to match this link node.
+    /// </summary>
     public override string[] Selectors => ["link", "a"];
 
+    /// <summary>
+    /// Gets the URL that this link points to.
+    /// </summary>
     public string? Url => url;
+
+    /// <summary>
+    /// Gets the title attribute of the link, if present.
+    /// </summary>
     public string? Title => title;
 }

@@ -58,7 +58,7 @@ public static partial class MarkdownQueryExtensions
         return markdigDocument.ToQueryableDocument();
     }
 
-    #endregion
+    #endregion Primary Conversion Methods
 
     #region Document Analysis Extensions
 
@@ -143,7 +143,7 @@ public static partial class MarkdownQueryExtensions
         return links;
     }
 
-    #endregion
+    #endregion Document Analysis Extensions
 
     #region Internal Conversion Implementation
 
@@ -526,5 +526,5 @@ public static partial class MarkdownQueryExtensions
         };
     }
 
-    #endregion
+    #endregion Internal Conversion Implementation
 }

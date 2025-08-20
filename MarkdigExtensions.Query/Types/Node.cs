@@ -4,6 +4,10 @@ using Markdig.Syntax;
 
 namespace MarkdigExtensions.Query.Types;
 
+/// <summary>
+/// Abstract base class for all markdown nodes.
+/// Provides common functionality for node traversal, attributes, and rendering capabilities.
+/// </summary>
 public abstract class Node(
     int[] position,
     string name,
@@ -14,31 +18,62 @@ public abstract class Node(
 {
     private readonly List<INode> children = children ?? [];
 
+    /// <summary>
+    /// Gets the CSS selectors that can be used to match this node type.
+    /// </summary>
     public abstract string[] Selectors { get; }
 
+    /// <summary>
+    /// Gets a value indicating whether this node has child nodes.
+    /// </summary>
     public bool HasChildren => this.children.Count > 0;
 
+    /// <summary>
+    /// Gets the read-only collection of child nodes.
+    /// </summary>
     public IReadOnlyList<INode> Children => this.children.AsReadOnly();
 
+    /// <summary>
+    /// Gets the name/type identifier of this node.
+    /// </summary>
     public string Name { get; } = name ?? throw new ArgumentNullException(nameof(name));
 
+    /// <summary>
+    /// Gets the text value or content of this node, if applicable.
+    /// </summary>
     public string? Value { get; } = value;
 
+    /// <summary>
+    /// Gets the read-only dictionary of attributes associated with this node.
+    /// </summary>
     public IReadOnlyDictionary<string, string?> Attributes { get; } =
         attributes ?? new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase);
 
+    /// <summary>
+    /// Gets the position of this node in the document tree as a hierarchical array of indices.
+    /// </summary>
     public int[] Position => position;
 
-    /// <summary>Gets or sets the original Markdig object reference (Block or Inline).</summary>
+    /// <summary>
+    /// Gets or sets the original Markdig object reference (Block or Inline).
+    /// </summary>
     public IMarkdownObject? MarkdigRef { get; set; }
 
+    /// <summary>
+    /// Adds a child node to this node's children collection.
+    /// </summary>
+    /// <param name="child">The child node to add.</param>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="child"/> is null.</exception>
     public void AddChild(INode child)
     {
         ArgumentNullException.ThrowIfNull(child);
         this.children.Add(child);
     }
 
-    /// <summary>Renders this node and all its children as plain text.</summary>
+    /// <summary>
+    /// Renders this node and all its children as plain text.
+    /// </summary>
+    /// <returns>A plain text representation of the node content.</returns>
     public virtual string GetPlainText()
     {
         // Build markdown first, then convert to plain text using Markdig
@@ -57,7 +92,10 @@ public abstract class Node(
         }
     }
 
-    /// <summary>Renders this node and all its children as HTML.</summary>
+    /// <summary>
+    /// Renders this node and all its children as HTML.
+    /// </summary>
+    /// <returns>An HTML representation of the node content.</returns>
     public virtual string GetHtml()
     {
         // Build markdown first, then convert to HTML using Markdig
@@ -77,14 +115,20 @@ public abstract class Node(
         }
     }
 
-    /// <summary>Renders this node and all its children as Markdown.</summary>
+    /// <summary>
+    /// Renders this node and all its children as Markdown.
+    /// </summary>
+    /// <returns>A Markdown representation of the node content.</returns>
     public virtual string GetMarkdown()
     {
         // Default implementation builds markdown from node structure
         return this.BuildMarkdownFromStructure();
     }
 
-    /// <summary>Builds markdown representation from the node structure.</summary>
+    /// <summary>
+    /// Builds markdown representation from the node structure.
+    /// </summary>
+    /// <returns>The markdown representation of this node and its children.</returns>
     protected virtual string BuildMarkdownFromStructure()
     {
         var markdown = new StringBuilder();
@@ -268,7 +312,10 @@ public abstract class Node(
         return markdown.ToString();
     }
 
-    /// <summary>Gets markdown content from all children.</summary>
+    /// <summary>
+    /// Gets markdown content from all children.
+    /// </summary>
+    /// <returns>The combined markdown content of all child nodes.</returns>
     protected string GetChildrenMarkdown()
     {
         var markdown = new StringBuilder();
@@ -279,7 +326,10 @@ public abstract class Node(
         return markdown.ToString();
     }
 
-    /// <summary>Builds table markdown representation.</summary>
+    /// <summary>
+    /// Builds table markdown representation.
+    /// </summary>
+    /// <returns>The markdown representation of a table.</returns>
     protected virtual string BuildTableMarkdown()
     {
         var markdown = new StringBuilder();
@@ -350,7 +400,10 @@ public abstract class Node(
         return markdown.ToString();
     }
 
-    /// <summary>Simple fallback method for extracting plain text when Markdig conversion fails.</summary>
+    /// <summary>
+    /// Simple fallback method for extracting plain text when Markdig conversion fails.
+    /// </summary>
+    /// <returns>The plain text content extracted from this node and its children.</returns>
     protected virtual string GetSimplePlainText()
     {
         var text = new StringBuilder();
