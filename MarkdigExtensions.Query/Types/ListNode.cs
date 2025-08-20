@@ -9,7 +9,7 @@ public enum ListType
     /// Bullet list (unordered list with bullet points).
     /// </summary>
     Bullet,
-    
+
     /// <summary>
     /// Ordered list (numbered list).
     /// </summary>
@@ -25,7 +25,7 @@ public enum ListDelimiter
     /// Period delimiter (1. 2. 3.).
     /// </summary>
     Period,
-    
+
     /// <summary>
     /// Parenthesis delimiter (1) 2) 3)).
     /// </summary>
@@ -73,17 +73,17 @@ public sealed class ListNode(
     /// Gets the type of this list (bullet or ordered).
     /// </summary>
     public ListType Type => listType;
-    
+
     /// <summary>
     /// Gets the delimiter used in this ordered list.
     /// </summary>
     public ListDelimiter Delimiter => listDelimiter;
-    
+
     /// <summary>
     /// Gets the starting number for ordered lists.
     /// </summary>
     public int Start => listStart;
-    
+
     /// <summary>
     /// Gets a value indicating whether this is a tight list (no blank lines between items).
     /// </summary>

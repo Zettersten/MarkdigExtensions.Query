@@ -54,17 +54,17 @@ public sealed class TableCellNode(
         /// No specific alignment specified.
         /// </summary>
         None,
-        
+
         /// <summary>
         /// Left-aligned text.
         /// </summary>
         Left,
-        
+
         /// <summary>
         /// Center-aligned text.
         /// </summary>
         Center,
-        
+
         /// <summary>
         /// Right-aligned text.
         /// </summary>
